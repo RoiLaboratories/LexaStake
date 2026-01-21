@@ -14,7 +14,6 @@ export default function StakePage() {
       minStakeValue: 10,
       token: "LEXA",
       color: "from-amber-700 to-amber-900",
-      borderColor: "border-green-400",
       roi: 5,
     },
     {
@@ -24,7 +23,6 @@ export default function StakePage() {
       minStakeValue: 20,
       token: "LEXA",
       color: "from-gray-400 to-gray-600",
-      borderColor: "border-blue-400",
       roi: 8,
     },
     {
@@ -34,7 +32,6 @@ export default function StakePage() {
       minStakeValue: 50,
       token: "LEXA",
       color: "from-yellow-400 to-yellow-600",
-      borderColor: "border-yellow-400",
       roi: 12,
     },
   ];
@@ -46,9 +43,9 @@ export default function StakePage() {
   return (
     <>
       <StakeHeader showMenu={false} showConnectButton={false} />
-      <main className="min-h-screen  flex flex-col items-center justify-center px-4 py-20">
-        <div className="max-w-5xl mx-auto w-full">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6">
+      <main className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+        <div className="max-w-4xl mx-auto w-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
             {tiers.map((tier, index) => (
               <motion.div
                 key={tier.name}
@@ -58,30 +55,31 @@ export default function StakePage() {
                 className="relative"
               >
                 <div
-                  className={`relative bg-black/50 backdrop-blur-sm border-2 ${tier.borderColor} p-6 h-full flex flex-col items-center`}
+                  className="relative backdrop-blur-md border-2 border-white p-5 h-full flex flex-col items-center"
                   style={{
-                    borderRadius: "50px 8px 50px 8px",
+                    borderRadius: "40px 8px 40px 8px",
+                    /* Green outer glow and subtle inner shadow */
                     boxShadow:
-                      "0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(0, 255, 200, 0.15)",
+                      "0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 10px rgba(34, 197, 94, 0.2)",
                   }}
                 >
                   <h2
-                    className={`text-2xl md:text-3xl font-bold bg-linear-to-r ${tier.color} bg-clip-text text-transparent mb-6`}
+                    className={`text-xl md:text-2xl font-bold bg-linear-to-r ${tier.color} bg-clip-text text-transparent mb-3`}
                     style={{ fontFamily: "serif" }}
                   >
                     {tier.name.toUpperCase()}
                   </h2>
 
-                  <p className="text-white text-lg mb-4 font-semibold">
+                  <p className="text-white text-sm mb-3 font-semibold opacity-80">
                     Minimum Stake
                   </p>
 
-                  <div className="text-center mb-6">
-                    <p className="text-5xl md:text-6xl font-bold text-white leading-none">
+                  <div className="text-center mb-5">
+                    <p className="text-4xl md:text-5xl font-bold text-white leading-none">
                       {tier.minStake}
                     </p>
                     {tier.token && (
-                      <p className="text-3xl md:text-4xl font-bold text-white mt-3 tracking-[0.3em]">
+                      <p className="text-xl md:text-2xl font-bold text-white mt-2 tracking-[0.2em]">
                         {tier.token}
                       </p>
                     )}
@@ -89,7 +87,7 @@ export default function StakePage() {
 
                   <button
                     onClick={() => handleStakeClick(tier.id)}
-                    className="w-full max-w-xs px-8 py-4 bg-yellow-500 text-black rounded-2xl font-bold text-lg hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50"
+                    className="w-full max-w-30 px-6 py-3 bg-yellow-500 text-black rounded-md font-bold text-base hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
                   >
                     Stake
                   </button>

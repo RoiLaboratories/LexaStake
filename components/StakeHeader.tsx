@@ -56,7 +56,7 @@ const StakeHeader = ({
         className="flex items-center gap-2 cursor-pointer"
         whileHover={{ scale: 1.05 }}
         transition={{ duration: 0.2 }}
-        onClick={() => router.push("/stake")}
+        onClick={() => router.push("/")}
       >
         <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center overflow-hidden">
           <Image
@@ -81,7 +81,7 @@ const StakeHeader = ({
             <button
               key={item}
               onClick={() => handleMenuClick(item)}
-              className={`text-lg font-semibold transition-colors relative ${
+              className={`text-lg font-semibold transition-colors relative cursor-pointer ${
                 activeTab === item
                   ? "text-yellow-500"
                   : "text-white hover:text-gray-300"
