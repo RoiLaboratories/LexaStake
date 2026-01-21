@@ -36,7 +36,7 @@ export default function EarnPage() {
         onConnect={handleConnect}
         activeTab="Earn"
       />
-      <main className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <main className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20 ">
         <div className="max-w-5xl mx-auto w-full">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -99,7 +99,7 @@ export default function EarnPage() {
                     onClick={handleCopy}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-yellow-500 text-yellow-500 rounded-xl sm:rounded-md font-bold hover:bg-yellow-500 hover:text-black transition-all flex items-center gap-2 justify-center min-w-[120px]"
+                    className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-yellow-500 text-yellow-500 rounded-xl sm:rounded-md font-bold hover:bg-yellow-500 hover:text-black transition-all flex items-center gap-2 justify-center min-w-30"
                   >
                     {copied ? (
                       <>
