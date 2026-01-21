@@ -9,6 +9,7 @@ interface StakeHeaderProps {
   showConnectButton?: boolean;
   walletAddress?: string | null;
   onConnect?: () => void;
+  activeTab?: string;
 }
 
 const StakeHeader = ({
@@ -16,14 +17,37 @@ const StakeHeader = ({
   showConnectButton = false,
   walletAddress = null,
   onConnect,
+  activeTab: initialActiveTab = "Stake",
 }: StakeHeaderProps) => {
   const router = useRouter();
   const menuItems = showMenu ? ["Stake", "Swap", "Earn", "Profile"] : [];
-  const [activeTab, setActiveTab] = useState("Stake");
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
 
   const formatAddress = (address: string) => {
     if (!address) return "";
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  };
+
+  const handleMenuClick = (item: string) => {
+    setActiveTab(item);
+
+    // Navigate to the appropriate page
+    switch (item) {
+      case "Stake":
+        router.push("/stake");
+        break;
+      case "Swap":
+        router.push("/swap");
+        break;
+      case "Earn":
+        router.push("/earn");
+        break;
+      case "Profile":
+        router.push("/profile");
+        break;
+      default:
+        break;
+    }
   };
 
   return (
@@ -56,16 +80,19 @@ const StakeHeader = ({
           {menuItems.map((item) => (
             <button
               key={item}
-              onClick={() => setActiveTab(item)}
+              onClick={() => handleMenuClick(item)}
               className={`text-lg font-semibold transition-colors relative ${
-                activeTab === item ? "text-yellow-500" : "text-white"
+                activeTab === item
+                  ? "text-yellow-500"
+                  : "text-white hover:text-gray-300"
               }`}
             >
               {item}
               {activeTab === item && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute -bottom-2 left-0 right-0 h-1 bg-yellow-500"
+                  className="absolute -bottom-2 left-0 right-0 h-1 bg-yellow-500 rounded-full"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
                 />
               )}
             </button>
@@ -76,7 +103,7 @@ const StakeHeader = ({
       {showConnectButton && (
         <button
           onClick={onConnect}
-          className="px-6 py-3 bg-yellow-500 text-black rounded-xl font-bold hover:bg-yellow-400 transition-all"
+          className="px-6 py-3 bg-yellow-500 text-black rounded-xl font-bold hover:bg-yellow-400 transition-all transform hover:scale-105"
         >
           {walletAddress ? formatAddress(walletAddress) : "Connect wallet"}
         </button>
