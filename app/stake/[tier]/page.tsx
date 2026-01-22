@@ -11,6 +11,10 @@ export default function StakeDetailPage() {
   const [duration, setDuration] = useState("90d");
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [showNotification, setShowNotification] = useState(false);
   const balance = 100000;
 
   const tierData = {
@@ -20,7 +24,10 @@ export default function StakeDetailPage() {
       minStakeValue: 10,
       token: "LEXA",
       color: "from-amber-700 to-amber-900",
-      roi: 5,
+      roi: {
+        "90d": 5,
+        "180d": 10,
+      },
     },
     silver: {
       name: "Silver",
@@ -28,7 +35,10 @@ export default function StakeDetailPage() {
       minStakeValue: 20,
       token: "LEXA",
       color: "from-gray-400 to-gray-600",
-      roi: 8,
+      roi: {
+        "90d": 10,
+        "180d": 25,
+      },
     },
     gold: {
       name: "Gold",
@@ -36,7 +46,10 @@ export default function StakeDetailPage() {
       minStakeValue: 50,
       token: "LEXA",
       color: "from-yellow-400 to-yellow-600",
-      roi: 12,
+      roi: {
+        "90d": 15,
+        "180d": 35,
+      },
     },
   };
 
@@ -49,7 +62,6 @@ export default function StakeDetailPage() {
   }, [tier, router]);
 
   const handleConnect = () => {
-    // Simulate wallet connection
     const mockAddress = "0xAB9.....875R6";
     setWalletAddress(mockAddress);
     setIsConnected(true);
@@ -61,8 +73,41 @@ export default function StakeDetailPage() {
     }
   };
 
+  const handleStake = async () => {
+    // Prevent multiple clicks
+    if (transactionStatus === "loading") return;
+
+    setTransactionStatus("loading");
+    setShowNotification(true);
+
+    // Simulate transaction
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Simulate success or failure (you can add your actual logic here)
+    const stakeValue = parseFloat(stakeAmount);
+    if (stakeValue > balance) {
+      setTransactionStatus("error");
+    } else {
+      setTransactionStatus("success");
+    }
+
+    // Auto-hide notification after 5 seconds
+    setTimeout(() => {
+      setShowNotification(false);
+      setTransactionStatus("idle");
+    }, 5000);
+  };
+
+  const closeNotification = () => {
+    setShowNotification(false);
+    setTransactionStatus("idle");
+  };
+
   const canStake =
     isConnected && stakeAmount && parseFloat(stakeAmount) >= tier.minStakeValue;
+
+  // Get current ROI based on selected duration
+  const currentROI = tier.roi[duration as keyof typeof tier.roi];
 
   if (!tier) return null;
 
@@ -74,7 +119,119 @@ export default function StakeDetailPage() {
         walletAddress={walletAddress}
         onConnect={handleConnect}
       />
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 py-20">
+
+      {/* Transaction Notifications */}
+      {showNotification && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm px-4">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`relative rounded-xl p-5 ${
+              transactionStatus === "loading"
+                ? "bg-gray-900 border-2 "
+                : transactionStatus === "success"
+                  ? "bg-gray-900 border-2 "
+                  : "bg-gray-900 border-2 "
+            }`}
+          >
+            {/* Close button */}
+            {transactionStatus !== "loading" && (
+              <button
+                onClick={closeNotification}
+                className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            )}
+
+            {/* Loading State */}
+            {transactionStatus === "loading" && (
+              <div className="text-center">
+                <div className="inline-block w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                <h3 className="text-lg font-bold text-white">
+                  Transaction Loading...
+                </h3>
+              </div>
+            )}
+
+            {/* Error State */}
+            {transactionStatus === "error" && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white">
+                    Token staking failed!
+                  </h3>
+                </div>
+                <p className="text-gray-400 text-sm mb-4 leading-relaxed">
+                  Insufficient balance to perform the stake, deposit LEXA to
+                  continue
+                </p>
+                <button className="w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors">
+                  View transaction
+                </button>
+              </div>
+            )}
+
+            {/* Success State */}
+            {transactionStatus === "success" && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path d="M5 13l4 4L19 7"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white">
+                    Token staked successfully!
+                  </h3>
+                </div>
+                <p className="text-gray-400 text-sm mb-4 leading-relaxed">
+                  Staked {parseFloat(stakeAmount).toLocaleString()} LEXA for{" "}
+                  {duration === "90d" ? "90" : "180"} days to get {currentROI}%
+                  ROI claimable daily
+                </p>
+                <button className="w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors">
+                  View transaction
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16 lg:pb-20 min-h-[calc(100vh-200px)] py-20">
         <div className="max-w-xl mx-auto w-full">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -88,7 +245,7 @@ export default function StakeDetailPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setDuration("90d")}
-                  className={`px-4 py-2 rounded-lg font-bold transition-all text-sm ${
+                  className={`px-4 py-2 rounded-sm font-bold transition-all text-sm ${
                     duration === "90d"
                       ? "bg-yellow-500 text-black"
                       : "bg-gray-700 text-white hover:bg-gray-600"
@@ -98,7 +255,7 @@ export default function StakeDetailPage() {
                 </button>
                 <button
                   onClick={() => setDuration("180d")}
-                  className={`px-4 py-2 rounded-lg font-bold transition-all text-sm ${
+                  className={`px-4 py-2 rounded-sm font-bold transition-all text-sm ${
                     duration === "180d"
                       ? "bg-yellow-500 text-black"
                       : "bg-gray-700 text-white hover:bg-gray-600"
@@ -130,7 +287,7 @@ export default function StakeDetailPage() {
               <button
                 onClick={handleStakeMax}
                 disabled={!isConnected}
-                className="px-3 py-1.5 border-2 border-yellow-500 text-yellow-500 rounded-lg font-bold hover:bg-yellow-500 hover:text-black transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 border-2 border-yellow-500 text-yellow-500 rounded-xs font-bold hover:bg-yellow-500 hover:text-black transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Stake Max
               </button>
@@ -138,29 +295,33 @@ export default function StakeDetailPage() {
 
             <div className="mb-6">
               <p className="text-gray-400 text-base">
-                ROI: <span className="text-white font-bold">{tier.roi}%</span>
+                ROI: <span className="text-white font-bold">{currentROI}%</span>
               </p>
             </div>
-
-            {!isConnected ? (
-              <button
-                onClick={handleConnect}
-                className="w-full px-6 py-4 bg-yellow-500 text-black rounded-2xl font-bold text-lg hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50"
-              >
-                Connect wallet
-              </button>
-            ) : (
-              <button
-                disabled={!canStake}
-                className={`w-full px-6 py-4 rounded-2xl font-bold text-lg transition-all duration-300 ${
-                  canStake
-                    ? "bg-yellow-500 text-black hover:bg-yellow-400 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
-                    : "bg-yellow-600 text-black cursor-not-allowed opacity-70"
-                }`}
-              >
-                Stake Now
-              </button>
-            )}
+            <div className="flex justify-center">
+              {!isConnected ? (
+                <button
+                  onClick={handleConnect}
+                  className="w-3/4 px-6 py-4 bg-yellow-500 text-black rounded-2xl font-bold text-lg hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
+                >
+                  Connect wallet
+                </button>
+              ) : (
+                <button
+                  onClick={handleStake}
+                  disabled={!canStake || transactionStatus === "loading"}
+                  className={`w-3/4 px-6 py-4 rounded-2xl font-bold text-lg transition-all duration-300 ${
+                    canStake && transactionStatus !== "loading"
+                      ? "bg-yellow-500 text-black hover:bg-yellow-400 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
+                      : "bg-yellow-600 text-black cursor-not-allowed opacity-70"
+                  }`}
+                >
+                  {transactionStatus === "loading"
+                    ? "Processing..."
+                    : "Stake Now"}
+                </button>
+              )}
+            </div>
           </motion.div>
         </div>
       </main>

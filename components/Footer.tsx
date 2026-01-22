@@ -1,7 +1,11 @@
 "use client";
-import { FaXTwitter, FaTelegram, FaYoutube } from "react-icons/fa6";
+import {
+  FaXTwitter,
+  FaTelegram,
+  FaYoutube,
+  FaCopyright,
+} from "react-icons/fa6";
 import { motion } from "framer-motion";
-import Image from "next/image";
 
 const Footer = () => {
   const socialLinks = [
@@ -27,13 +31,7 @@ const Footer = () => {
       className="relative z-10 flex items-center justify-between px-8 py-6 border-t border-gray-800 bg-black"
     >
       <div className="flex items-center gap-2 text-gray-500 text-sm">
-        <Image
-          src="/assets/LexaLogo2.svg"
-          alt="Tower logo"
-          width={40}
-          height={40}
-          className="object-contain"
-        />
+        <FaCopyright className="w-5 h-5" />
         <span>Lexastake 2026</span>
       </div>
 

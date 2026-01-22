@@ -40,7 +40,7 @@ export default function RootLayout({
             quality={90}
           />
           {/* Black to Green gradient overlay */}
-          <div className="absolute inset-0 bg-linear-to-b from-black/80 via-black/50 to-green-900/60" />
+          <div className="absolute inset-0 bg-linear-to-b from-black/80 via-black/50 to-green-900/60 opacity-50" />
         </div>
 
         {/* Content */}

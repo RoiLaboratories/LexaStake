@@ -13,7 +13,7 @@ export default function StakePage() {
       minStake: "$10",
       minStakeValue: 10,
       token: "LEXA",
-      color: "from-amber-700 to-amber-900",
+
       roi: 5,
     },
     {
@@ -22,7 +22,6 @@ export default function StakePage() {
       minStake: "$20",
       minStakeValue: 20,
       token: "LEXA",
-      color: "from-gray-400 to-gray-600",
       roi: 8,
     },
     {
@@ -31,7 +30,6 @@ export default function StakePage() {
       minStake: "$50",
       minStakeValue: 50,
       token: "LEXA",
-      color: "from-yellow-400 to-yellow-600",
       roi: 12,
     },
   ];
@@ -43,9 +41,9 @@ export default function StakePage() {
   return (
     <>
       <StakeHeader showMenu={false} showConnectButton={false} />
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16 lg:pb-20 min-h-[calc(100vh-200px)] ">
         <div className="max-w-4xl mx-auto w-full">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-12 ">
             {tiers.map((tier, index) => (
               <motion.div
                 key={tier.name}
@@ -54,28 +52,27 @@ export default function StakePage() {
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 className="relative"
               >
+                <h2
+                  className={`text-center text-xl md:text-2xl font-bold text-white mb-3`}
+                  style={{ fontFamily: "serif" }}
+                >
+                  {tier.name.toUpperCase()}
+                </h2>
                 <div
-                  className="relative backdrop-blur-md border-2 border-white p-5 h-full flex flex-col items-center"
+                  className="relative backdrop-blur-md border-2 py-2 border-white  h-full flex flex-col justify-center items-center"
                   style={{
-                    borderRadius: "40px 8px 40px 8px",
+                    borderRadius: "60px 8px 60px 8px",
                     /* Green outer glow and subtle inner shadow */
                     boxShadow:
                       "0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 10px rgba(34, 197, 94, 0.2)",
                   }}
                 >
-                  <h2
-                    className={`text-xl md:text-2xl font-bold bg-linear-to-r ${tier.color} bg-clip-text text-transparent mb-3`}
-                    style={{ fontFamily: "serif" }}
-                  >
-                    {tier.name.toUpperCase()}
-                  </h2>
-
-                  <p className="text-white text-sm mb-3 font-semibold opacity-80">
+                  <p className="text-white text-sm mb-3 font-semibold">
                     Minimum Stake
                   </p>
 
                   <div className="text-center mb-5">
-                    <p className="text-4xl md:text-5xl font-bold text-white leading-none">
+                    <p className="text-4xl md:text-6xl font-extrabold text-white ">
                       {tier.minStake}
                     </p>
                     {tier.token && (
