@@ -45,7 +45,7 @@ export default function SwapPage() {
         onConnect={handleConnect}
         activeTab="Swap"
       />
-      <main className="min-h-screen flex items-center justify-center px-4 py-20 bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <main className="min-h-screen flex items-center justify-center px-4 py-20 ">
         <div className="max-w-lg mx-auto w-full">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}

@@ -157,7 +157,7 @@ const StakeHeader = ({
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="md:hidden border-b border-yellow-600/30 bg-black/80 backdrop-blur-sm overflow-hidden"
+            className="md:hidden border-b border-yellow-600/30  backdrop-blur-sm overflow-hidden"
           >
             <nav className="flex flex-col p-4 gap-2">
               {menuItems.map((item, index) => (
