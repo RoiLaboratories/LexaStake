@@ -47,7 +47,7 @@ const StakingTab = ({ isConnected }: StakingTabProps) => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="rounded-2xl overflow-hidden"
+      className=" overflow-hidden"
       style={{
         backgroundColor: "hsl(220, 20%, 10%)",
         border: "1px solid hsl(220, 15%, 18%)",
