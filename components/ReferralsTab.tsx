@@ -2,8 +2,37 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 
-const ReferralsTab = () => {
-  const referrals: any[] = [];
+interface ReferralsTabProps {
+  isConnected: boolean;
+}
+
+const ReferralsTab = ({ isConnected }: ReferralsTabProps) => {
+  // Mock data when wallet is connected
+  const referrals = isConnected
+    ? [
+        {
+          address: "0xgjsjdhdjcuishbhzxbdads",
+          reward: "50 LEXA",
+          action: "Stake",
+          status: "Active",
+          claim: true,
+        },
+        {
+          address: "0xgjsjdhdjcuishbhzxbdads",
+          reward: "0.005 BNB",
+          action: "LEXA Buy",
+          status: "Successful",
+          claim: true,
+        },
+        {
+          address: "0xgjsjdhdjcuishbhzxbdads",
+          reward: "0.003 BNB",
+          action: "LEXA Buy",
+          status: "Successful",
+          claim: true,
+        },
+      ]
+    : [];
 
   return (
     <motion.div
@@ -12,7 +41,7 @@ const ReferralsTab = () => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="rounded-2xl overflow-hidden"
+      className=" overflow-hidden"
       style={{
         backgroundColor: "hsl(220, 20%, 10%)",
         border: "1px solid hsl(220, 15%, 18%)",
@@ -26,16 +55,19 @@ const ReferralsTab = () => {
               <thead>
                 <tr style={{ borderBottom: "1px solid hsl(220, 15%, 18%)" }}>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    User
+                    Address
                   </th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Amount Staked
+                    Reward
                   </th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Your Earnings
+                    Action
+                  </th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
+                    Status
                   </th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-gray-400">
-                    Date Joined
+                    Claim
                   </th>
                 </tr>
               </thead>
@@ -55,20 +87,37 @@ const ReferralsTab = () => {
                     }}
                   >
                     <td className="py-5 px-6">
-                      <span className="font-medium">{referral.user}</span>
+                      <span className="font-medium">{referral.address}</span>
                     </td>
                     <td className="py-5 px-6">
-                      <span className="font-medium">
-                        {referral.amountStaked} LEXA
+                      <span
+                        className={`font-medium ${
+                          referral.reward.includes("LEXA")
+                            ? "text-green-400"
+                            : "text-green-400"
+                        }`}
+                      >
+                        {referral.reward}
                       </span>
                     </td>
                     <td className="py-5 px-6">
-                      <span className="font-medium text-yellow-500">
-                        {referral.earnings} LEXA
+                      <span className="font-medium">{referral.action}</span>
+                    </td>
+                    <td className="py-5 px-6">
+                      <span
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium inline-block ${
+                          referral.status === "Active"
+                            ? "text-green-400 bg-green-400/10"
+                            : "text-green-400 bg-green-400/10"
+                        }`}
+                      >
+                        {referral.status}
                       </span>
                     </td>
                     <td className="py-5 px-6 text-right">
-                      <div className="font-medium">{referral.dateJoined}</div>
+                      <button className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors">
+                        Claim
+                      </button>
                     </td>
                   </motion.tr>
                 ))}
@@ -91,24 +140,37 @@ const ReferralsTab = () => {
                 }}
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">User</span>
-                  <span className="font-semibold">{referral.user}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Amount Staked</span>
-                  <span className="font-medium">
-                    {referral.amountStaked} LEXA
+                  <span className="text-gray-400 text-sm">Address</span>
+                  <span className="font-semibold text-sm">
+                    {referral.address}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Your Earnings</span>
-                  <span className="font-medium text-yellow-500">
-                    {referral.earnings} LEXA
+                  <span className="text-gray-400 text-sm">Reward</span>
+                  <span className="font-medium text-green-400">
+                    {referral.reward}
                   </span>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-                  <span className="text-gray-400 text-sm">Date Joined</span>
-                  <span className="font-medium">{referral.dateJoined}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Action</span>
+                  <span className="font-medium">{referral.action}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Status</span>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      referral.status === "Active"
+                        ? "text-green-400 bg-green-400/10"
+                        : "text-green-400 bg-green-400/10"
+                    }`}
+                  >
+                    {referral.status}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-gray-700">
+                  <button className="w-full px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors">
+                    Claim
+                  </button>
                 </div>
               </motion.div>
             ))}
@@ -131,10 +193,14 @@ const ReferralsTab = () => {
             />
           </div>
           <h4 className="text-lg sm:text-xl font-semibold mb-2">
-            No Referrals Yet
+            {isConnected
+              ? "You have no active referrals"
+              : "Wallet not connected"}
           </h4>
           <p className="text-gray-400 text-center text-sm sm:text-base">
-            Share your referral link to start earning rewards.
+            {isConnected
+              ? "Invite friends with your referral link to view your referrals"
+              : "Connect wallet with stakes to view your stakes"}
           </p>
         </motion.div>
       )}

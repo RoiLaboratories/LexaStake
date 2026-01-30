@@ -64,13 +64,44 @@ const Profile = () => {
                 transition={{ duration: 0.5, delay: 0.2 }}
                 className="text-center sm:text-left"
               >
-                <p className="text-gray-400 mb-1 text-sm sm:text-base">
-                  {isConnected ? walletAddress : "Not Connected"}
-                </p>
-                <h2 className="text-4xl sm:text-5xl font-bold mb-2">$0.00</h2>
-                <p className="text-green-400 text-sm">
-                  +0.00% <span className="text-gray-500">($0.00)</span>
-                </p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-gray-400 text-sm sm:text-base">
+                    {isConnected ? "Wallet connected" : "Wallet not connected"}
+                  </p>
+                  {isConnected ? (
+                    <svg
+                      className="w-4 h-4 text-green-500"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="w-4 h-4 text-red-500"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                </div>
+                <h2 className="text-4xl sm:text-5xl font-bold mb-2">
+                  {isConnected ? "100000 LEXA" : "0 LEXA"}
+                </h2>
+                {isConnected && (
+                  <p className="text-green-400 text-sm">
+                    +0.00% <span className="text-gray-500">($0.00)</span>
+                  </p>
+                )}
               </motion.div>
             </div>
           </motion.div>
@@ -80,10 +111,10 @@ const Profile = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="mb-6 sm:mb-8"
+            className=""
           >
             <div
-              className="flex items-center gap-2 sm:gap-4 rounded-xl p-1 w-full overflow-x-auto"
+              className="flex items-center gap-2 sm:gap-4 rounded-t-xl p-1 w-full overflow-x-auto"
               style={{
                 backgroundColor: "hsl(220, 20%, 10%)",
                 border: "1px solid hsl(220, 15%, 18%)",
@@ -99,7 +130,7 @@ const Profile = () => {
                     : "text-gray-400 hover:text-white"
                 }`}
               >
-                Staking
+                My Stakes
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -130,9 +161,15 @@ const Profile = () => {
 
           {/* Content Section */}
           <AnimatePresence mode="wait">
-            {activeTab === "staking" && <StakingTab />}
-            {activeTab === "referrals" && <ReferralsTab />}
-            {activeTab === "activities" && <ActivitiesTab />}
+            {activeTab === "staking" && (
+              <StakingTab isConnected={isConnected} />
+            )}
+            {activeTab === "referrals" && (
+              <ReferralsTab isConnected={isConnected} />
+            )}
+            {activeTab === "activities" && (
+              <ActivitiesTab isConnected={isConnected} />
+            )}
           </AnimatePresence>
         </main>
       </div>

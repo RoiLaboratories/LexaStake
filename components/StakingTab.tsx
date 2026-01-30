@@ -2,8 +2,43 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 
-const StakingTab = () => {
-  const stakes: any[] = [];
+interface StakingTabProps {
+  isConnected: boolean;
+}
+
+const StakingTab = ({ isConnected }: StakingTabProps) => {
+  // Mock data when wallet is connected
+  const stakes = isConnected
+    ? [
+        {
+          pools: "LEXA/LEXA",
+          amount: "20000",
+          earned: "10000",
+          tier: "Bronze (5%)",
+          duration: "90 Days",
+          claim: true,
+          restake: true,
+        },
+        {
+          pools: "LEXA/LEXA",
+          amount: "10000",
+          earned: "5000",
+          tier: "Bronze (10%)",
+          duration: "180 Days",
+          claim: true,
+          restake: true,
+        },
+        {
+          pools: "LEXA/LEXA",
+          amount: "5000",
+          earned: "2000",
+          tier: "Silver (10%)",
+          duration: "90 Days",
+          claim: true,
+          restake: true,
+        },
+      ]
+    : [];
 
   return (
     <motion.div
@@ -26,19 +61,22 @@ const StakingTab = () => {
               <thead>
                 <tr style={{ borderBottom: "1px solid hsl(220, 15%, 18%)" }}>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Amount
+                    Pools/Amount
                   </th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Lock Period
+                    Earned
                   </th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    ROI
+                    Tier/APY
                   </th>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Status
+                    Duration
+                  </th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
+                    Claim
                   </th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-gray-400">
-                    Unlock Date
+                    Restake
                   </th>
                 </tr>
               </thead>
@@ -58,29 +96,55 @@ const StakingTab = () => {
                     }}
                   >
                     <td className="py-5 px-6">
-                      <span className="font-medium">{stake.amount} LEXA</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-gray-700">
+                            <Image
+                              src="/assets/LexaLogo2.svg"
+                              alt="LEXA"
+                              width={32}
+                              height={32}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-gray-700 -ml-2">
+                            <Image
+                              src="/assets/bnb.svg"
+                              alt="BNB"
+                              width={32}
+                              height={32}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">{stake.pools}</div>
+                          <div className="text-sm text-gray-400">
+                            {stake.amount}
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-5 px-6">
-                      <span className="font-medium">{stake.lockPeriod}</span>
-                    </td>
-                    <td className="py-5 px-6">
-                      <span className="font-medium text-yellow-500">
-                        {stake.roi}%
+                      <span className="font-medium text-green-400">
+                        {stake.earned}
                       </span>
                     </td>
                     <td className="py-5 px-6">
-                      <span
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border inline-block ${
-                          stake.status === "Active"
-                            ? "text-green-400 border-green-400/30 bg-green-400/10"
-                            : "text-gray-400 border-gray-400/30 bg-gray-400/10"
-                        }`}
-                      >
-                        {stake.status}
-                      </span>
+                      <span className="font-medium">{stake.tier}</span>
+                    </td>
+                    <td className="py-5 px-6">
+                      <span className="font-medium">{stake.duration}</span>
+                    </td>
+                    <td className="py-5 px-6">
+                      <button className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors">
+                        Claim
+                      </button>
                     </td>
                     <td className="py-5 px-6 text-right">
-                      <div className="font-medium">{stake.unlockDate}</div>
+                      <button className="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors">
+                        Restake
+                      </button>
                     </td>
                   </motion.tr>
                 ))}
@@ -103,34 +167,57 @@ const StakingTab = () => {
                 }}
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Amount</span>
-                  <span className="font-semibold">{stake.amount} LEXA</span>
+                  <span className="text-gray-400 text-sm">Pools/Amount</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center">
+                      <div className="w-6 h-6 rounded-full overflow-hidden border-2 border-gray-700">
+                        <Image
+                          src="/assets/lexa-icon.png"
+                          alt="LEXA"
+                          width={24}
+                          height={24}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="w-6 h-6 rounded-full overflow-hidden border-2 border-gray-700 -ml-2">
+                        <Image
+                          src="/assets/lexa-icon.png"
+                          alt="LEXA"
+                          width={24}
+                          height={24}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">{stake.pools}</div>
+                      <div className="text-sm text-gray-400">
+                        {stake.amount}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Lock Period</span>
-                  <span className="font-medium">{stake.lockPeriod}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">ROI</span>
-                  <span className="font-medium text-yellow-500">
-                    {stake.roi}%
+                  <span className="text-gray-400 text-sm">Earned</span>
+                  <span className="font-medium text-green-400">
+                    {stake.earned}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Status</span>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                      stake.status === "Active"
-                        ? "text-green-400 border-green-400/30 bg-green-400/10"
-                        : "text-gray-400 border-gray-400/30 bg-gray-400/10"
-                    }`}
-                  >
-                    {stake.status}
-                  </span>
+                  <span className="text-gray-400 text-sm">Tier/APY</span>
+                  <span className="font-medium">{stake.tier}</span>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-                  <span className="text-gray-400 text-sm">Unlock Date</span>
-                  <span className="font-medium">{stake.unlockDate}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400 text-sm">Duration</span>
+                  <span className="font-medium">{stake.duration}</span>
+                </div>
+                <div className="flex gap-2 pt-2 border-t border-gray-700">
+                  <button className="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors">
+                    Claim
+                  </button>
+                  <button className="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors">
+                    Restake
+                  </button>
                 </div>
               </motion.div>
             ))}
@@ -153,10 +240,12 @@ const StakingTab = () => {
             />
           </div>
           <h4 className="text-lg sm:text-xl font-semibold mb-2">
-            No Active Stakes
+            {isConnected ? "No Active Stakes" : "Wallet not connected"}
           </h4>
           <p className="text-gray-400 text-center text-sm sm:text-base">
-            You haven't staked any LEXA tokens yet.
+            {isConnected
+              ? "You haven't staked any LEXA tokens yet."
+              : "Connect wallet with stakes to view your stakes"}
           </p>
         </motion.div>
       )}

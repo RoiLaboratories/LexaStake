@@ -2,8 +2,32 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 
-const ActivitiesTab = () => {
-  const activities: any[] = [];
+interface ActivitiesTabProps {
+  isConnected: boolean;
+}
+
+const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
+  // Mock data when wallet is connected
+  const activities = isConnected
+    ? [
+        {
+          action: "Swapped 0.01 BNB for 100000 LEXA",
+          status: "Successful",
+        },
+        {
+          action: "Staked 20000 LEXA",
+          status: "Successful",
+        },
+        {
+          action: "Staked 20000 LEXA",
+          status: "Failed",
+        },
+        {
+          action: "Unstaked 20000 LEXA",
+          status: "Failed",
+        },
+      ]
+    : [];
 
   return (
     <motion.div
@@ -12,7 +36,7 @@ const ActivitiesTab = () => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className="rounded-2xl overflow-hidden"
+      className=" overflow-hidden"
       style={{
         backgroundColor: "hsl(220, 20%, 10%)",
         border: "1px solid hsl(220, 15%, 18%)",
@@ -26,16 +50,10 @@ const ActivitiesTab = () => {
               <thead>
                 <tr style={{ borderBottom: "1px solid hsl(220, 15%, 18%)" }}>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Type
-                  </th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Amount
-                  </th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
-                    Status
+                    Action
                   </th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-gray-400">
-                    Date
+                    Status
                   </th>
                 </tr>
               </thead>
@@ -55,28 +73,44 @@ const ActivitiesTab = () => {
                     }}
                   >
                     <td className="py-5 px-6">
-                      <span className="font-medium">{activity.type}</span>
-                    </td>
-                    <td className="py-5 px-6">
-                      <span className="font-medium">
-                        {activity.amount} LEXA
-                      </span>
-                    </td>
-                    <td className="py-5 px-6">
-                      <span
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border inline-block ${
-                          activity.status === "Successful"
-                            ? "text-green-400 border-green-400/30 bg-green-400/10"
-                            : "text-red-400 border-red-400/30 bg-red-400/10"
-                        }`}
-                      >
-                        {activity.status}
-                      </span>
+                      <span className="font-medium">{activity.action}</span>
                     </td>
                     <td className="py-5 px-6 text-right">
-                      <div className="font-medium">{activity.date}</div>
-                      <div className="text-xs text-gray-400">
-                        {activity.time}
+                      <div className="flex items-center justify-end gap-2">
+                        <span
+                          className={`font-medium ${
+                            activity.status === "Successful"
+                              ? "text-green-400"
+                              : "text-red-400"
+                          }`}
+                        >
+                          {activity.status}
+                        </span>
+                        {activity.status === "Successful" ? (
+                          <svg
+                            className="w-5 h-5 text-green-400"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="w-5 h-5 text-red-400"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
@@ -100,30 +134,48 @@ const ActivitiesTab = () => {
                 }}
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Type</span>
-                  <span className="font-semibold">{activity.type}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Amount</span>
-                  <span className="font-medium">{activity.amount} LEXA</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Status</span>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                      activity.status === "Successful"
-                        ? "text-green-400 border-green-400/30 bg-green-400/10"
-                        : "text-red-400 border-red-400/30 bg-red-400/10"
-                    }`}
-                  >
-                    {activity.status}
+                  <span className="text-gray-400 text-sm">Action</span>
+                  <span className="font-semibold text-right max-w-50">
+                    {activity.action}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-                  <span className="text-gray-400 text-sm">Date</span>
-                  <div className="text-right">
-                    <div className="font-medium">{activity.date}</div>
-                    <div className="text-xs text-gray-400">{activity.time}</div>
+                  <span className="text-gray-400 text-sm">Status</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`font-medium ${
+                        activity.status === "Successful"
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {activity.status}
+                    </span>
+                    {activity.status === "Successful" ? (
+                      <svg
+                        className="w-5 h-5 text-green-400"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        className="w-5 h-5 text-red-400"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -147,10 +199,12 @@ const ActivitiesTab = () => {
             />
           </div>
           <h4 className="text-lg sm:text-xl font-semibold mb-2">
-            No Activities
+            {isConnected ? "No Activities" : "Wallet not connected"}
           </h4>
           <p className="text-gray-400 text-center text-sm sm:text-base">
-            Your transaction history will appear here.
+            {isConnected
+              ? "Your transaction history will appear here."
+              : "Connect wallet with stakes to view your stakes"}
           </p>
         </motion.div>
       )}

@@ -13,7 +13,6 @@ export default function StakePage() {
       minStake: "$10",
       minStakeValue: 10,
       token: "LEXA",
-
       roi: 5,
     },
     {
@@ -41,9 +40,9 @@ export default function StakePage() {
   return (
     <>
       <StakeHeader showMenu={false} showConnectButton={false} />
-      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16 lg:pb-20 min-h-[calc(100vh-200px)] ">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-6 sm:py-8 min-h-[calc(100vh-80px)]">
         <div className="max-w-4xl mx-auto w-full">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-12 ">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 md:gap-10">
             {tiers.map((tier, index) => (
               <motion.div
                 key={tier.name}
@@ -53,30 +52,29 @@ export default function StakePage() {
                 className="relative"
               >
                 <h2
-                  className={`text-center text-xl md:text-2xl font-bold text-white mb-3`}
+                  className="text-center text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 sm:mb-3"
                   style={{ fontFamily: "serif" }}
                 >
                   {tier.name.toUpperCase()}
                 </h2>
                 <div
-                  className="relative backdrop-blur-md border-2 py-2 border-white  h-full flex flex-col justify-center items-center"
+                  className="relative backdrop-blur-md border-2 px-4 py-6 sm:py-8 border-white flex flex-col justify-center items-center"
                   style={{
-                    borderRadius: "60px 8px 60px 8px",
-                    /* Green outer glow and subtle inner shadow */
+                    borderRadius: "40px 8px 40px 8px",
                     boxShadow:
                       "0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 10px rgba(34, 197, 94, 0.2)",
                   }}
                 >
-                  <p className="text-white text-sm mb-3 font-semibold">
+                  <p className="text-white text-xs sm:text-sm mb-2 sm:mb-3 font-semibold">
                     Minimum Stake
                   </p>
 
-                  <div className="text-center mb-5">
-                    <p className="text-4xl md:text-6xl font-extrabold text-white ">
+                  <div className="text-center mb-4 sm:mb-5">
+                    <p className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white">
                       {tier.minStake}
                     </p>
                     {tier.token && (
-                      <p className="text-xl md:text-2xl font-bold text-white mt-2 tracking-[0.2em]">
+                      <p className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-white mt-1 sm:mt-2 tracking-[0.2em]">
                         {tier.token}
                       </p>
                     )}
@@ -84,7 +82,7 @@ export default function StakePage() {
 
                   <button
                     onClick={() => handleStakeClick(tier.id)}
-                    className="w-full max-w-30 px-6 py-3 bg-yellow-500 text-black rounded-md font-bold text-base hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
+                    className="w-full max-w-40 px-6 py-2.5 sm:py-3 bg-yellow-500 text-black rounded-md font-bold text-sm sm:text-base hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
                   >
                     Stake
                   </button>
