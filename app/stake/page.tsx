@@ -39,7 +39,7 @@ export default function StakePage() {
 
   return (
     <>
-      <StakeHeader showMenu={false} showConnectButton={false} />
+      <StakeHeader showMenu={true} showConnectButton={false} activeTab="Stake" />
       <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-6 sm:py-8 min-h-[calc(100vh-80px)]">
         <div className="max-w-4xl mx-auto w-full">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 md:gap-10">
