@@ -136,7 +136,7 @@ export default function TransactionNotification({
                     height={16}
                     className="opacity-70"
                   />
-                  <span>Via LEXA Swap</span>
+                  <span>Via LexaSwap</span>
                 </div>
                 <button className="w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors">
                   View transaction

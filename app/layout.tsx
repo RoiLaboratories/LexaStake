@@ -18,7 +18,7 @@ const cinzel = Cinzel({
 
 export const metadata: Metadata = {
   title: "LEXASTAKE - Secure Your Crypto Future With Lexastake",
-  description: "Trade cryptocurrencies with ease on Tower Finance",
+  description: "Trade cryptocurrencies with ease on LexaSwap",
 };
 
 export default function RootLayout({
