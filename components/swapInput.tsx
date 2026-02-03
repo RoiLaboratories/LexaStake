@@ -29,8 +29,9 @@ export default function SwapInput({
   showBalance = true,
   isLoading = false,
 }: SwapInputProps) {
+  const borderRadius = label === "Sell" ? "rounded-t-2xl" : "rounded-b-2xl";
   return (
-    <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-5">
+    <div className={`bg-[#151617] ${borderRadius} p-4 sm:p-5`}>
       {/* Header */}
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <span className="text-gray-400 font-semibold text-sm">{label}</span>

@@ -36,9 +36,8 @@ const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className=" overflow-hidden"
+      className=" overflow-hidden bg-[#151617] "
       style={{
-        backgroundColor: "hsl(220, 20%, 10%)",
         border: "1px solid hsl(220, 15%, 18%)",
       }}
     >
@@ -46,7 +45,7 @@ const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
         <>
           {/* Desktop Table View */}
           <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full ">
               <thead>
                 <tr style={{ borderBottom: "1px solid hsl(220, 15%, 18%)" }}>
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">

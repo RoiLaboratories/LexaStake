@@ -177,7 +177,7 @@ export default function SwapPage() {
             </div>
 
             {/* Swap Arrow Button */}
-            <div className="flex justify-center -my-4 relative z-10">
+            <div className="flex justify-center -my-[25px] relative z-10">
               <motion.button
                 onClick={swapTokens}
                 className="w-10 h-10 rounded-xl bg-gray-800/80 border border-gray-700 flex items-center justify-center hover:bg-gray-700 transition-colors"

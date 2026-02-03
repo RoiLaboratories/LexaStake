@@ -41,9 +41,8 @@ const ReferralsTab = ({ isConnected }: ReferralsTabProps) => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
-      className=" overflow-hidden"
+      className="bg-[#151617] overflow-hidden"
       style={{
-        backgroundColor: "hsl(220, 20%, 10%)",
         border: "1px solid hsl(220, 15%, 18%)",
       }}
     >

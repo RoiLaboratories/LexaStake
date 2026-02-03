@@ -116,7 +116,7 @@ const Profile = () => {
             <div
               className="flex items-center gap-2 sm:gap-4 rounded-t-xl p-1 w-full overflow-x-auto"
               style={{
-                backgroundColor: "hsl(220, 20%, 10%)",
+                // backgroundColor: "hsl(220, 20%, 10%)",
                 border: "1px solid hsl(220, 15%, 18%)",
               }}
             >
@@ -160,17 +160,19 @@ const Profile = () => {
           </motion.div>
 
           {/* Content Section */}
-          <AnimatePresence mode="wait">
-            {activeTab === "staking" && (
-              <StakingTab isConnected={isConnected} />
-            )}
-            {activeTab === "referrals" && (
-              <ReferralsTab isConnected={isConnected} />
-            )}
-            {activeTab === "activities" && (
-              <ActivitiesTab isConnected={isConnected} />
-            )}
-          </AnimatePresence>
+          <div>
+            <AnimatePresence mode="wait">
+              {activeTab === "staking" && (
+                <StakingTab isConnected={isConnected} />
+              )}
+              {activeTab === "referrals" && (
+                <ReferralsTab isConnected={isConnected} />
+              )}
+              {activeTab === "activities" && (
+                <ActivitiesTab isConnected={isConnected} />
+              )}
+            </AnimatePresence>
+          </div>
         </main>
       </div>
     </>
