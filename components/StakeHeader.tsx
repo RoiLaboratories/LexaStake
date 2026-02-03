@@ -4,30 +4,67 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { usePrivy } from "@privy-io/react-auth";
 
 interface StakeHeaderProps {
   showMenu?: boolean;
   showConnectButton?: boolean;
-  walletAddress?: string | null;
-  onConnect?: () => void;
   activeTab?: string;
 }
 
 const StakeHeader = ({
-  showMenu = false,
-  showConnectButton = false,
-  walletAddress = null,
-  onConnect,
+  showMenu = true,
+  showConnectButton = true,
   activeTab: initialActiveTab = "Stake",
 }: StakeHeaderProps) => {
   const router = useRouter();
+  const { authenticated, user, login, logout } = usePrivy();
+  const [isLoading, setIsLoading] = useState(false);
   const menuItems = showMenu ? ["Stake", "Swap", "Earn", "Profile"] : [];
   const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const formatAddress = (address: string) => {
-    if (!address) return "";
-    return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  const getDisplayAddress = () => {
+    if (!user) return "";
+    
+    if (user.wallet?.address) {
+      const addr = user.wallet.address;
+      return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+    }
+    
+    if (user.linkedAccounts) {
+      const walletAccount = user.linkedAccounts.find(
+        (acc) => "type" in acc && acc.type === "wallet"
+      );
+      if (walletAccount && "address" in walletAccount) {
+        const addr = (walletAccount as { address: string }).address;
+        return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+      }
+    }
+    
+    return "";
+  };
+
+  const handleConnect = async () => {
+    setIsLoading(true);
+    try {
+      await login();
+    } catch (error) {
+      console.error("Login failed:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setIsLoading(true);
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleMenuClick = (item: string) => {
@@ -108,28 +145,61 @@ const StakeHeader = ({
 
         {/* Right Side Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Connect Wallet Button - Desktop */}
+          {/* Connect/Wallet Button */}
           {showConnectButton && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onConnect}
-              className="hidden sm:block px-4 sm:px-6 py-2 sm:py-3 bg-yellow-500 text-black rounded-xl font-bold hover:bg-yellow-400 transition-all"
-            >
-              {walletAddress ? formatAddress(walletAddress) : "Connect wallet"}
-            </motion.button>
-          )}
-
-          {/* Connect Wallet Button - Mobile */}
-          {showConnectButton && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onConnect}
-              className="block sm:hidden px-3 py-2 bg-yellow-500 text-black rounded-lg text-xs font-bold hover:bg-yellow-400 transition-all"
-            >
-              {walletAddress ? formatAddress(walletAddress) : "Connect"}
-            </motion.button>
+            <>
+              {authenticated ? (
+                <>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    disabled={isLoading}
+                    className="hidden sm:block px-4 sm:px-6 py-2 sm:py-3 bg-yellow-500 text-black rounded-xl font-bold hover:bg-yellow-400 transition-all disabled:opacity-50"
+                  >
+                    {getDisplayAddress()}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleDisconnect}
+                    disabled={isLoading}
+                    className="block sm:hidden px-3 py-2 bg-yellow-500 text-black rounded-lg text-xs font-bold hover:bg-yellow-400 transition-all disabled:opacity-50"
+                  >
+                    {isLoading ? "..." : "Disconnect"}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleDisconnect}
+                    disabled={isLoading}
+                    className="hidden sm:block px-4 sm:px-6 py-2 sm:py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all disabled:opacity-50"
+                  >
+                    {isLoading ? "..." : "Disconnect"}
+                  </motion.button>
+                </>
+              ) : (
+                <>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleConnect}
+                    disabled={isLoading}
+                    className="hidden sm:block px-4 sm:px-6 py-2 sm:py-3 bg-yellow-500 text-black rounded-xl font-bold hover:bg-yellow-400 transition-all disabled:opacity-50"
+                  >
+                    {isLoading ? "..." : "Connect wallet"}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleConnect}
+                    disabled={isLoading}
+                    className="block sm:hidden px-3 py-2 bg-yellow-500 text-black rounded-lg text-xs font-bold hover:bg-yellow-400 transition-all disabled:opacity-50"
+                  >
+                    {isLoading ? "..." : "Connect"}
+                  </motion.button>
+                </>
+              )}
+            </>
           )}
 
           {/* Mobile Menu Button */}

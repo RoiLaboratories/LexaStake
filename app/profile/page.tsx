@@ -23,8 +23,6 @@ const Profile = () => {
       <StakeHeader
         showMenu={true}
         showConnectButton={true}
-        walletAddress={walletAddress}
-        onConnect={handleConnect}
         activeTab="Profile"
       />
 
