@@ -49,61 +49,43 @@ export default function EarnPage() {
             </div>
 
             {/* Referral Link Section */}
-            {!isConnected ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="max-w-2xl mx-auto px-2"
-              >
-                <button
-                  onClick={handleConnect}
-                  className="w-full border-2 border-yellow-600/50 rounded-2xl p-4 sm:p-6 bg-black/40 backdrop-blur-sm hover:bg-black/60 hover:border-yellow-500 transition-all cursor-pointer"
-                >
-                  <p className="text-yellow-500 text-base sm:text-lg font-semibold">
-                    Connect wallet to generate your referral link
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+              className="max-w-4xl mx-auto space-y-3 sm:space-y-4 px-2"
+            >
+              <h3 className="text-white text-base sm:text-lg font-semibold text-left">
+                Share referral link
+              </h3>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+                <div className="flex-1 border-2 border-yellow-600/50 rounded-xl sm:rounded-md p-3 sm:p-4 bg-black/40 backdrop-blur-sm overflow-hidden">
+                  <p className="text-white text-left font-mono text-xs sm:text-sm md:text-base break-all">
+                    {referralLink}
                   </p>
-                </button>
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="max-w-4xl mx-auto space-y-3 sm:space-y-4 px-2"
-              >
-                <h3 className="text-white text-base sm:text-lg font-semibold text-left">
-                  Share referral link
-                </h3>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-                  <div className="flex-1 border-2 border-yellow-600/50 rounded-xl sm:rounded-md p-3 sm:p-4 bg-black/40 backdrop-blur-sm overflow-hidden">
-                    <p className="text-white text-left font-mono text-xs sm:text-sm md:text-base break-all">
-                      {referralLink}
-                    </p>
-                  </div>
-
-                  <motion.button
-                    onClick={handleCopy}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-yellow-500 text-yellow-500 rounded-xl sm:rounded-md font-bold hover:bg-yellow-500 hover:text-black transition-all flex items-center gap-2 justify-center min-w-30"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span className="text-sm sm:text-base">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span className="text-sm sm:text-base">Copy</span>
-                      </>
-                    )}
-                  </motion.button>
                 </div>
-              </motion.div>
-            )}
+
+                <motion.button
+                  onClick={handleCopy}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-yellow-500 text-yellow-500 rounded-xl sm:rounded-md font-bold hover:bg-yellow-500 hover:text-black transition-all flex items-center gap-2 justify-center min-w-30"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-sm sm:text-base">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-sm sm:text-base">Copy</span>
+                    </>
+                  )}
+                </motion.button>
+              </div>
+            </motion.div>
           </motion.div>
         </div>
       </main>
