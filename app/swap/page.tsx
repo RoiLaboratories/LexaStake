@@ -114,8 +114,6 @@ export default function SwapPage() {
       <StakeHeader
         showMenu={true}
         showConnectButton={true}
-        walletAddress={walletAddress}
-        onConnect={handleConnect}
         activeTab="Swap"
       />
 

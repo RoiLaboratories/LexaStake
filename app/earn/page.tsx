@@ -5,19 +5,9 @@ import { Copy, Check } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 
 export default function EarnPage() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const handleConnect = () => {
-    const mockAddress = "0xAB9.....875R6";
-    setWalletAddress(mockAddress);
-    setIsConnected(true);
-  };
-
-  const referralLink = isConnected
-    ? `https://lexastake.xyz?ref=${walletAddress?.replace(/\./g, "")}`
-    : "";
+  const referralLink = "https://lexastake.xyz";
 
   const handleCopy = async () => {
     if (referralLink) {
@@ -32,8 +22,6 @@ export default function EarnPage() {
       <StakeHeader
         showMenu={true}
         showConnectButton={true}
-        walletAddress={walletAddress}
-        onConnect={handleConnect}
         activeTab="Earn"
       />
       <main className="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20 ">
