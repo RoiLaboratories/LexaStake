@@ -48,6 +48,15 @@ class BlockchainService {
 
       // Validate addresses
       const validWallet = ethers.getAddress(walletAddress);
+
+      // Check if it's BNB (native currency) by comparing with WBNB address
+      if (tokenAddress.toLowerCase() === "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c") {
+        // Fetch native BNB balance
+        const balance = await this.provider.getBalance(validWallet);
+        return ethers.formatEther(balance);
+      }
+
+      // For ERC20 tokens, validate and use contract
       const validToken = ethers.getAddress(tokenAddress);
 
       // Create contract instance
