@@ -9,14 +9,7 @@ import ActivitiesTab from "@/components/ActivitiesTab";
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState("staking");
-  const [isConnected, setIsConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-
-  const handleConnect = () => {
-    const mockAddress = "0xAB9.....875R6";
-    setWalletAddress(mockAddress);
-    setIsConnected(true);
-  };
+  const [isConnected] = useState(false);
 
   return (
     <>

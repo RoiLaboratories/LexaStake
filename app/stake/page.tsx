@@ -2,9 +2,61 @@
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
+import { useEffect, useState } from "react";
+import { usePrivy, User } from "@privy-io/react-auth";
+import { swapService } from "@/services/swap.service";
+import { TOKENS } from "@/constants/tokens";
+
+function extractWalletAddress(user: User | null): string | null {
+  if (!user) return null;
+  if (user.wallet?.address) return user.wallet.address;
+  const walletAccount = user.linkedAccounts?.find(
+    (acc) => "type" in acc && acc.type === "wallet",
+  );
+  if (walletAccount && "address" in walletAccount) {
+    return (walletAccount as { address: string }).address;
+  }
+  return null;
+}
 
 export default function StakePage() {
   const router = useRouter();
+  const { authenticated, user } = usePrivy();
+  const [lexaBalance, setLexaBalance] = useState<string | null>(null);
+  const [pendingFetch, setPendingFetch] = useState(false);
+
+  useEffect(() => {
+    const addr = extractWalletAddress(user);
+    if (!addr || !authenticated) {
+      if (lexaBalance !== null) {
+        setLexaBalance(null);
+      }
+      setPendingFetch(false);
+      return;
+    }
+
+    setPendingFetch(true);
+  }, [user, authenticated, lexaBalance]);
+
+  useEffect(() => {
+    if (!pendingFetch) return;
+
+    const addr = extractWalletAddress(user);
+    if (!addr) return;
+
+    const fetchLexa = async () => {
+      try {
+        const data = await swapService.getWalletBalance(addr, TOKENS.LEXA.address);
+        setLexaBalance(data.balance);
+      } catch (error) {
+        console.error("Error fetching LEXA balance:", error);
+      } finally {
+        setPendingFetch(false);
+      }
+    };
+
+    fetchLexa();
+  }, [pendingFetch, user]);
 
   const tiers = [
     {
@@ -68,6 +120,12 @@ export default function StakePage() {
                   <p className="text-white text-xs sm:text-sm mb-2 sm:mb-3 font-semibold">
                     Minimum Stake
                   </p>
+
+                  {lexaBalance !== null && (
+                    <p className="text-yellow-400 text-xs sm:text-sm mb-2 font-semibold">
+                      Your LEXA: {parseFloat(lexaBalance).toLocaleString()}
+                    </p>
+                  )}
 
                   <div className="text-center mb-4 sm:mb-5">
                     <p className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white">

@@ -9,12 +9,30 @@ import { useSwap } from "@/hooks/useSwap";
 import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
 import SwapInput from "@/components/swapInput";
+import { usePrivy, User } from "@privy-io/react-auth";
+import { TOKENS } from "@/constants/tokens";
+
+function extractWalletAddress(user: User | null): string | null {
+  if (!user) return null;
+  if (user.wallet?.address) return user.wallet.address;
+  const walletAccount = user.linkedAccounts?.find(
+    (acc) => "type" in acc && acc.type === "wallet",
+  );
+  if (walletAccount && "address" in walletAccount) {
+    return (walletAccount as { address: string }).address;
+  }
+  return null;
+}
 
 export default function SwapPage() {
-  const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [bnbBalance, setBnbBalance] = useState<string | null>(null);
+  const [lexaBalance, setLexaBalance] = useState<string | null>(null);
+  const [pendingNotification, setPendingNotification] = useState(false);
+
+  const { authenticated, user, login } = usePrivy();
 
   const {
     sellToken,
@@ -38,51 +56,88 @@ export default function SwapPage() {
     updateBalance,
   } = useSwap();
 
-  // Connect wallet handler
-  const handleConnect = () => {
-    const mockAddress = "0xAB9.....875R6";
-    setWalletAddress(mockAddress);
-    setIsConnected(true);
+  // Connect wallet handler using Privy
+  const handleConnect = async () => {
+    try {
+      await login();
+    } catch (error) {
+      console.error("Privy login failed:", error);
+    }
   };
 
-  // Fetch balance when wallet connects
+  // Derive wallet address from Privy user
   useEffect(() => {
-    if (isConnected && walletAddress) {
-      const fetchBalance = async () => {
-        try {
-          const balanceData = await swapService.getWalletBalance(
-            walletAddress,
-            sellToken.address || "",
-          );
-          updateBalance(balanceData.balance);
-        } catch (error) {
-          console.error("Error fetching balance:", error);
-          // Fallback to mock balance
-          updateBalance("100000");
-        }
-      };
-      fetchBalance();
+    const addr = extractWalletAddress(user);
+    if (addr !== walletAddress) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWalletAddress(addr);
     }
-  }, [isConnected, walletAddress, sellToken, updateBalance]);
+  }, [user, walletAddress]);
+
+  // Fetch balances when authenticated and address available
+  useEffect(() => {
+    if (!authenticated || !walletAddress) return;
+
+    const fetchBalances = async () => {
+      try {
+        // Fetch sell token balance (used by swap inputs)
+        const sellBalanceData = await swapService.getWalletBalance(
+          walletAddress,
+          sellToken.address || "",
+        );
+        updateBalance(sellBalanceData.balance);
+
+        // Fetch BNB and LEXA balances for display
+        const bnbData = await swapService.getWalletBalance(
+          walletAddress,
+          TOKENS.BNB.address,
+        );
+        const lexaData = await swapService.getWalletBalance(
+          walletAddress,
+          TOKENS.LEXA.address,
+        );
+
+        setBnbBalance(bnbData.balance);
+        setLexaBalance(lexaData.balance);
+      } catch (error) {
+        console.error("Error fetching balances:", error);
+      }
+    };
+
+    fetchBalances();
+  }, [authenticated, walletAddress, sellToken, updateBalance]);
 
   // Handle transaction notifications
   useEffect(() => {
-    if (
+    const isActive =
       transactionStatus === "loading" ||
       transactionStatus === "success" ||
-      transactionStatus === "error"
-    ) {
-      setShowNotification(true);
+      transactionStatus === "error";
+    
+    if (!isActive) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPendingNotification(false);
+      return;
+    }
 
-      if (transactionStatus === "success" || transactionStatus === "error") {
-        const timer = setTimeout(() => {
-          setShowNotification(false);
-          resetTransaction();
-        }, 5000);
-        return () => clearTimeout(timer);
-      }
+    setPendingNotification(true);
+
+    if (transactionStatus !== "loading") {
+      const timer = setTimeout(() => {
+        setShowNotification(false);
+        setPendingNotification(false);
+        resetTransaction();
+      }, 5000);
+      return () => clearTimeout(timer);
     }
   }, [transactionStatus, resetTransaction]);
+
+  useEffect(() => {
+    if (pendingNotification) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowNotification(true);
+    }
+  }, [pendingNotification]);
 
   const handleSlippageSelect = (value: string) => {
     setSlippage(value);
@@ -147,9 +202,13 @@ export default function SwapPage() {
           >
             {/* Header */}
             <div className="flex justify-between items-center mb-6 sm:mb-8">
-              <h2 className="text-xl sm:text-2xl font-bold text-white">
-                Swap Tokens
-              </h2>
+              <div className="flex flex-col">
+                <h2 className="text-xl sm:text-2xl font-bold text-white">Swap Tokens</h2>
+                <div className="text-xs text-gray-400 mt-1 flex gap-4">
+                  <span>BNB: {bnbBalance ? parseFloat(bnbBalance).toLocaleString() : "—"}</span>
+                  <span>LEXA: {lexaBalance ? parseFloat(lexaBalance).toLocaleString() : "—"}</span>
+                </div>
+              </div>
               <button
                 onClick={() => setShowSettings(true)}
                 className="p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
@@ -168,7 +227,7 @@ export default function SwapPage() {
                 onAmountChange={setSellAmount}
                 onMaxClick={handleMaxAmount}
                 onPercentageClick={handlePercentage}
-                disabled={!isConnected}
+                disabled={!authenticated}
                 showBalance={true}
                 isLoading={false}
               />
@@ -194,7 +253,7 @@ export default function SwapPage() {
                 token={receiveToken}
                 amount={receiveAmount}
                 onAmountChange={setReceiveAmount}
-                disabled={!isConnected}
+                disabled={!authenticated}
                 showBalance={true}
                 isLoading={isLoadingQuote}
               />
@@ -226,7 +285,7 @@ export default function SwapPage() {
 
             {/* Connect/Swap Button */}
             <div className="flex justify-center">
-              {!isConnected ? (
+              {!authenticated ? (
                 <button
                   onClick={handleConnect}
                   className="w-full sm:w-3/4 px-6 py-3 sm:py-4 bg-yellow-500 text-black rounded-2xl font-bold text-base sm:text-lg hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50"

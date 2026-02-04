@@ -3,7 +3,7 @@ export type Token = {
   name: string;
   logoPath: string;
   decimals: number;
-  address?: string;
+  address: string;
 };
 
 export type TransactionStatus = "idle" | "loading" | "success" | "error";
