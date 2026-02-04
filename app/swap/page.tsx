@@ -10,7 +10,6 @@ import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
 import SwapInput from "@/components/swapInput";
 import { usePrivy, User } from "@privy-io/react-auth";
-import { TOKENS } from "@/constants/tokens";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -28,8 +27,6 @@ export default function SwapPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
-  const [bnbBalance, setBnbBalance] = useState<string | null>(null);
-  const [lexaBalance, setLexaBalance] = useState<string | null>(null);
   const [pendingNotification, setPendingNotification] = useState(false);
 
   const { authenticated, user, login } = usePrivy();
@@ -83,24 +80,11 @@ export default function SwapPage() {
         // Fetch sell token balance (used by swap inputs)
         const sellBalanceData = await swapService.getWalletBalance(
           walletAddress,
-          sellToken.address || "",
+          sellToken.address,
         );
         updateBalance(sellBalanceData.balance);
-
-        // Fetch BNB and LEXA balances for display
-        const bnbData = await swapService.getWalletBalance(
-          walletAddress,
-          TOKENS.BNB.address,
-        );
-        const lexaData = await swapService.getWalletBalance(
-          walletAddress,
-          TOKENS.LEXA.address,
-        );
-
-        setBnbBalance(bnbData.balance);
-        setLexaBalance(lexaData.balance);
       } catch (error) {
-        console.error("Error fetching balances:", error);
+        console.error("Error fetching balance:", error);
       }
     };
 
@@ -202,13 +186,7 @@ export default function SwapPage() {
           >
             {/* Header */}
             <div className="flex justify-between items-center mb-6 sm:mb-8">
-              <div className="flex flex-col">
-                <h2 className="text-xl sm:text-2xl font-bold text-white">Swap Tokens</h2>
-                <div className="text-xs text-gray-400 mt-1 flex gap-4">
-                  <span>BNB: {bnbBalance ? parseFloat(bnbBalance).toLocaleString() : "—"}</span>
-                  <span>LEXA: {lexaBalance ? parseFloat(lexaBalance).toLocaleString() : "—"}</span>
-                </div>
-              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">Swap Tokens</h2>
               <button
                 onClick={() => setShowSettings(true)}
                 className="p-2 rounded-lg hover:bg-gray-800/50 transition-colors"

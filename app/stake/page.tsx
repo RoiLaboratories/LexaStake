@@ -23,26 +23,14 @@ export default function StakePage() {
   const router = useRouter();
   const { authenticated, user } = usePrivy();
   const [lexaBalance, setLexaBalance] = useState<string | null>(null);
-  const [pendingFetch, setPendingFetch] = useState(false);
 
   useEffect(() => {
     const addr = extractWalletAddress(user);
     if (!addr || !authenticated) {
-      if (lexaBalance !== null) {
-        setLexaBalance(null);
-      }
-      setPendingFetch(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLexaBalance(null);
       return;
     }
-
-    setPendingFetch(true);
-  }, [user, authenticated, lexaBalance]);
-
-  useEffect(() => {
-    if (!pendingFetch) return;
-
-    const addr = extractWalletAddress(user);
-    if (!addr) return;
 
     const fetchLexa = async () => {
       try {
@@ -50,13 +38,11 @@ export default function StakePage() {
         setLexaBalance(data.balance);
       } catch (error) {
         console.error("Error fetching LEXA balance:", error);
-      } finally {
-        setPendingFetch(false);
       }
     };
 
     fetchLexa();
-  }, [pendingFetch, user]);
+  }, [user, authenticated]);
 
   const tiers = [
     {

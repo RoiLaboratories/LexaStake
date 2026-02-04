@@ -1,15 +1,55 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePrivy, User } from "@privy-io/react-auth";
 import StakeHeader from "@/components/StakeHeader";
 import StakingTab from "@/components/StakingTab";
 import ReferralsTab from "@/components/ReferralsTab";
 import ActivitiesTab from "@/components/ActivitiesTab";
+import { swapService } from "@/services/swap.service";
+import { TOKENS } from "@/constants/tokens";
+
+function extractWalletAddress(user: User | null): string | null {
+  if (!user) return null;
+  if (user.wallet?.address) return user.wallet.address;
+  const walletAccount = user.linkedAccounts?.find(
+    (acc) => "type" in acc && acc.type === "wallet",
+  );
+  if (walletAccount && "address" in walletAccount) {
+    return (walletAccount as { address: string }).address;
+  }
+  return null;
+}
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState("staking");
-  const [isConnected] = useState(false);
+  const [lexaBalance, setLexaBalance] = useState<string | null>(null);
+  const [bnbBalance, setBnbBalance] = useState<string | null>(null);
+  const { authenticated, user } = usePrivy();
+
+  useEffect(() => {
+    const addr = extractWalletAddress(user);
+    if (!addr || !authenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLexaBalance(null);
+      setBnbBalance(null);
+      return;
+    }
+
+    const fetchBalances = async () => {
+      try {
+        const lexaData = await swapService.getWalletBalance(addr, TOKENS.LEXA.address);
+        const bnbData = await swapService.getWalletBalance(addr, TOKENS.BNB.address);
+        setLexaBalance(lexaData.balance);
+        setBnbBalance(bnbData.balance);
+      } catch (error) {
+        console.error("Error fetching balances:", error);
+      }
+    };
+
+    fetchBalances();
+  }, [user, authenticated]);
 
   return (
     <>
@@ -57,9 +97,9 @@ const Profile = () => {
               >
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-gray-400 text-sm sm:text-base">
-                    {isConnected ? "Wallet connected" : "Wallet not connected"}
+                    {authenticated ? "Wallet connected" : "Wallet not connected"}
                   </p>
-                  {isConnected ? (
+                  {authenticated ? (
                     <svg
                       className="w-4 h-4 text-green-500"
                       fill="currentColor"
@@ -86,11 +126,11 @@ const Profile = () => {
                   )}
                 </div>
                 <h2 className="text-4xl sm:text-5xl font-bold mb-2">
-                  {isConnected ? "100000 LEXA" : "0 LEXA"}
+                  {lexaBalance ? parseFloat(lexaBalance).toLocaleString() : "0"} LEXA
                 </h2>
-                {isConnected && (
+                {authenticated && lexaBalance && (
                   <p className="text-green-400 text-sm">
-                    +0.00% <span className="text-gray-500">($0.00)</span>
+                    BNB: {bnbBalance ? parseFloat(bnbBalance).toLocaleString() : "0"} <span className="text-gray-500">($0.00)</span>
                   </p>
                 )}
               </motion.div>
@@ -154,13 +194,13 @@ const Profile = () => {
           <div>
             <AnimatePresence mode="wait">
               {activeTab === "staking" && (
-                <StakingTab isConnected={isConnected} />
+                <StakingTab isConnected={authenticated} />
               )}
               {activeTab === "referrals" && (
-                <ReferralsTab isConnected={isConnected} />
+                <ReferralsTab isConnected={authenticated} />
               )}
               {activeTab === "activities" && (
-                <ActivitiesTab isConnected={isConnected} />
+                <ActivitiesTab isConnected={authenticated} />
               )}
             </AnimatePresence>
           </div>

@@ -3,6 +3,8 @@ import {
   TransactionResult,
   WalletBalance,
 } from "@/types/swap.types";
+import { blockchainService } from "./blockchain.service";
+import { TOKENS } from "@/constants/tokens";
 
 class SwapService {
   private baseUrl: string;
@@ -94,23 +96,27 @@ class SwapService {
     tokenAddress: string,
   ): Promise<WalletBalance> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/wallet/${walletAddress}/balance/${tokenAddress}`,
+      const balance = await blockchainService.getTokenBalance(
+        walletAddress,
+        tokenAddress,
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch wallet balance");
+      
+      // Determine token symbol based on address
+      let tokenSymbol = "TOKEN";
+      if (tokenAddress.toLowerCase() === TOKENS.LEXA.address.toLowerCase()) {
+        tokenSymbol = "LEXA";
+      } else if (tokenAddress.toLowerCase() === TOKENS.BNB.address.toLowerCase()) {
+        tokenSymbol = "BNB";
       }
 
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching wallet balance:", error);
-      // Return mock data
       return {
-        token: "LEXA",
-        balance: "100000",
+        token: tokenSymbol,
+        balance,
         usdValue: "0",
       };
+    } catch (error) {
+      console.error("Error fetching wallet balance:", error);
+      throw error;
     }
   }
 
@@ -119,18 +125,25 @@ class SwapService {
    */
   async getAllBalances(walletAddress: string): Promise<WalletBalance[]> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/wallet/${walletAddress}/balances`,
+      const { lexa, bnb } = await blockchainService.getLexaAndBNBBalances(
+        walletAddress,
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch wallet balances");
-      }
-
-      return await response.json();
+      return [
+        {
+          token: "BNB",
+          balance: bnb,
+          usdValue: "0",
+        },
+        {
+          token: "LEXA",
+          balance: lexa,
+          usdValue: "0",
+        },
+      ];
     } catch (error) {
       console.error("Error fetching wallet balances:", error);
-      return [];
+      throw error;
     }
   }
 
