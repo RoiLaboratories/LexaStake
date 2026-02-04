@@ -10,6 +10,7 @@ import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
 import SwapInput from "@/components/swapInput";
 import { usePrivy, User } from "@privy-io/react-auth";
+import { TOKENS } from "@/constants/tokens";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -27,6 +28,7 @@ export default function SwapPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [bnbBalance, setBnbBalance] = useState<string | null>(null);
   const [pendingNotification, setPendingNotification] = useState(false);
 
   const { authenticated, user, login } = usePrivy();
@@ -83,8 +85,15 @@ export default function SwapPage() {
           sellToken.address,
         );
         updateBalance(sellBalanceData.balance);
+
+        // Fetch BNB balance
+        const bnbData = await swapService.getWalletBalance(
+          walletAddress,
+          TOKENS.BNB.address,
+        );
+        setBnbBalance(bnbData.balance);
       } catch (error) {
-        console.error("Error fetching balance:", error);
+        console.error("Error fetching balances:", error);
       }
     };
 

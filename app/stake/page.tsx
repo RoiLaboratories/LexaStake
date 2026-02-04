@@ -32,16 +32,16 @@ export default function StakePage() {
       return;
     }
 
-    const fetchLexa = async () => {
+    const fetchLexaBalance = async () => {
       try {
-        const data = await swapService.getWalletBalance(addr, TOKENS.LEXA.address);
-        setLexaBalance(data.balance);
+        const lexaData = await swapService.getWalletBalance(addr, TOKENS.LEXA.address);
+        setLexaBalance(lexaData.balance);
       } catch (error) {
         console.error("Error fetching LEXA balance:", error);
       }
     };
 
-    fetchLexa();
+    fetchLexaBalance();
   }, [user, authenticated]);
 
   const tiers = [
