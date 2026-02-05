@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogOut } from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
 
 interface StakeHeaderProps {
@@ -163,18 +163,20 @@ const StakeHeader = ({
                     whileTap={{ scale: 0.95 }}
                     onClick={handleDisconnect}
                     disabled={isLoading}
-                    className="block sm:hidden px-3 py-2 bg-yellow-500 text-black rounded-lg text-xs font-bold hover:bg-yellow-400 transition-all disabled:opacity-50"
+                    className="block sm:hidden p-2 bg-yellow-500 text-black rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
+                    aria-label="Disconnect wallet"
                   >
-                    {isLoading ? "..." : "Disconnect"}
+                    {isLoading ? "..." : <LogOut className="w-4 h-4" />}
                   </motion.button>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleDisconnect}
                     disabled={isLoading}
-                    className="hidden sm:block px-4 sm:px-6 py-2 sm:py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all disabled:opacity-50"
+                    className="hidden sm:block p-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50"
+                    aria-label="Disconnect wallet"
                   >
-                    {isLoading ? "..." : "Disconnect"}
+                    {isLoading ? "..." : <LogOut className="w-4 h-4" />}
                   </motion.button>
                 </>
               ) : (

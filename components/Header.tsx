@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { useState } from "react";
+import { LogOut } from "lucide-react";
 
 const Header = () => {
   const router = useRouter();
@@ -93,9 +94,14 @@ const Header = () => {
             whileTap={{ scale: 0.95 }}
             onClick={handleDisconnect}
             disabled={isLoading}
-            className="px-3 sm:px-6 py-2 sm:py-3 bg-red-500 text-white rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold hover:bg-red-600 transition-all disabled:opacity-50"
+            className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+            aria-label="Disconnect wallet"
           >
-            {isLoading ? "Disconnecting..." : "Disconnect"}
+            {isLoading ? (
+              "..."
+            ) : (
+              <LogOut className="w-4 h-4" />
+            )}
           </motion.button>
         </div>
       ) : (
