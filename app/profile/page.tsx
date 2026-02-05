@@ -39,8 +39,14 @@ const Profile = () => {
 
     const fetchBalances = async () => {
       try {
-        const lexaData = await swapService.getWalletBalance(addr, TOKENS.LEXA.address);
-        const bnbData = await swapService.getWalletBalance(addr, TOKENS.BNB.address);
+        const lexaData = await swapService.getWalletBalance(
+          addr,
+          TOKENS.LEXA.address,
+        );
+        const bnbData = await swapService.getWalletBalance(
+          addr,
+          TOKENS.BNB.address,
+        );
         setLexaBalance(lexaData.balance);
         setBnbBalance(bnbData.balance);
       } catch (error) {
@@ -97,7 +103,9 @@ const Profile = () => {
               >
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-gray-400 text-sm sm:text-base">
-                    {authenticated ? "Wallet connected" : "Wallet not connected"}
+                    {authenticated
+                      ? "Wallet connected"
+                      : "Wallet not connected"}
                   </p>
                   {authenticated ? (
                     <svg
@@ -126,11 +134,14 @@ const Profile = () => {
                   )}
                 </div>
                 <h2 className="text-4xl sm:text-5xl font-bold mb-2">
-                  {lexaBalance ? parseFloat(lexaBalance).toLocaleString() : "0"} LEXA
+                  {lexaBalance ? parseFloat(lexaBalance).toLocaleString() : "0"}{" "}
+                  LEXA
                 </h2>
                 {authenticated && lexaBalance && (
                   <p className="text-green-400 text-sm">
-                    BNB: {bnbBalance ? parseFloat(bnbBalance).toLocaleString() : "0"} <span className="text-gray-500">($0.00)</span>
+                    BNB:{" "}
+                    {bnbBalance ? parseFloat(bnbBalance).toLocaleString() : "0"}{" "}
+                    <span className="text-gray-500">($0.00)</span>
                   </p>
                 )}
               </motion.div>
