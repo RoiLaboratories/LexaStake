@@ -28,13 +28,13 @@ const Profile = () => {
 
       <div className="text-white min-h-screen ">
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <main className=" mx-auto pt-8 sm:pt-12">
           {/* Profile Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-8 sm:mb-12"
+            className="mb-8 sm:mb-12 px-4 sm:px-6 lg:px-8"
           >
             <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8">
               Profile
@@ -45,7 +45,7 @@ const Profile = () => {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-linear-to-br from-gray-700 to-gray-800 border-2 border-gray-600"
+                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-white border-2 border-gray-600"
               >
                 <Image
                   src="/assets/user.png"
@@ -114,8 +114,8 @@ const Profile = () => {
             <div
               className="flex items-center gap-2 sm:gap-4 rounded-t-xl p-1 w-full overflow-x-auto"
               style={{
-                // backgroundColor: "hsl(220, 20%, 10%)",
                 border: "1px solid hsl(220, 15%, 18%)",
+                borderBottom: "none",
               }}
             >
               <motion.button

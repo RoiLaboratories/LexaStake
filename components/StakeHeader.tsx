@@ -26,22 +26,22 @@ const StakeHeader = ({
 
   const getDisplayAddress = () => {
     if (!user) return "";
-    
+
     if (user.wallet?.address) {
       const addr = user.wallet.address;
       return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
     }
-    
+
     if (user.linkedAccounts) {
       const walletAccount = user.linkedAccounts.find(
-        (acc) => "type" in acc && acc.type === "wallet"
+        (acc) => "type" in acc && acc.type === "wallet",
       );
       if (walletAccount && "address" in walletAccount) {
         const addr = (walletAccount as { address: string }).address;
         return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
       }
     }
-    
+
     return "";
   };
 
