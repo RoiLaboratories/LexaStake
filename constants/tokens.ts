@@ -14,7 +14,7 @@ export const TOKENS: Record<string, Token> = {
     logoPath: "/assets/bnb.svg",
     decimals: 18,
     // Use wrapped BNB (WBNB) on BSC mainnet for ERC20 balance queries
-    address: "0xbb4CdB9CBd36B01bD1cBaebF2De08d9173bc095c",
+    address: "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c",
   },
   // Add more tokens as needed
 };

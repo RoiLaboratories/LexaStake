@@ -28,7 +28,8 @@ export default function SwapPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
-  const [bnbBalance, setBnbBalance] = useState<string | null>(null);
+  const [sellTokenBalance, setSellTokenBalance] = useState<string | null>(null);
+  const [receiveTokenBalance, setReceiveTokenBalance] = useState<string | null>(null);
   const [pendingNotification, setPendingNotification] = useState(false);
 
   const { authenticated, user, login } = usePrivy();
@@ -79,26 +80,27 @@ export default function SwapPage() {
 
     const fetchBalances = async () => {
       try {
-        // Fetch sell token balance (used by swap inputs)
+        // Fetch sell token balance
         const sellBalanceData = await swapService.getWalletBalance(
           walletAddress,
           sellToken.address,
         );
+        setSellTokenBalance(sellBalanceData.balance);
         updateBalance(sellBalanceData.balance);
 
-        // Fetch BNB balance
-        const bnbData = await swapService.getWalletBalance(
+        // Fetch receive token balance
+        const receiveBalanceData = await swapService.getWalletBalance(
           walletAddress,
-          TOKENS.BNB.address,
+          receiveToken.address,
         );
-        setBnbBalance(bnbData.balance);
+        setReceiveTokenBalance(receiveBalanceData.balance);
       } catch (error) {
         console.error("Error fetching balances:", error);
       }
     };
 
     fetchBalances();
-  }, [authenticated, walletAddress, sellToken, updateBalance]);
+  }, [authenticated, walletAddress, sellToken, receiveToken, updateBalance]);
 
   // Handle transaction notifications
   useEffect(() => {
@@ -239,6 +241,7 @@ export default function SwapPage() {
                 label="Receive"
                 token={receiveToken}
                 amount={receiveAmount}
+                balance={receiveTokenBalance || "0"}
                 onAmountChange={setReceiveAmount}
                 disabled={!authenticated}
                 showBalance={true}

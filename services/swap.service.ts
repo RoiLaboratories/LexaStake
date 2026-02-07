@@ -3,7 +3,6 @@ import {
   TransactionResult,
   WalletBalance,
 } from "@/types/swap.types";
-import { blockchainService } from "./blockchain.service";
 import { TOKENS } from "@/constants/tokens";
 
 class SwapService {
@@ -96,16 +95,30 @@ class SwapService {
     tokenAddress: string,
   ): Promise<WalletBalance> {
     try {
-      const balance = await blockchainService.getTokenBalance(
-        walletAddress,
-        tokenAddress,
-      );
-      
+      const response = await fetch("/api/wallet/balance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          walletAddress,
+          tokenAddress,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch balance");
+      }
+
+      const { balance } = await response.json();
+
       // Determine token symbol based on address
       let tokenSymbol = "TOKEN";
       if (tokenAddress.toLowerCase() === TOKENS.LEXA.address.toLowerCase()) {
         tokenSymbol = "LEXA";
-      } else if (tokenAddress.toLowerCase() === TOKENS.BNB.address.toLowerCase()) {
+      } else if (
+        tokenAddress.toLowerCase() === TOKENS.BNB.address.toLowerCase()
+      ) {
         tokenSymbol = "BNB";
       }
 
@@ -125,9 +138,21 @@ class SwapService {
    */
   async getAllBalances(walletAddress: string): Promise<WalletBalance[]> {
     try {
-      const { lexa, bnb } = await blockchainService.getLexaAndBNBBalances(
-        walletAddress,
-      );
+      const response = await fetch("/api/wallet/balances", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          walletAddress,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch balances");
+      }
+
+      const { lexa, bnb } = await response.json();
 
       return [
         {

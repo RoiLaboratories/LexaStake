@@ -1,10 +1,13 @@
 // hooks/useSwap.ts
 import { useState, useCallback, useEffect } from "react";
 import { Token, TransactionStatus, SwapQuote } from "@/types/swap.types";
-import { swapService } from "@/services/swap.service";
+import { pancakeSwapService } from "@/services/pancakeswap.service";
 import { DEFAULT_SLIPPAGE, TOKENS } from "@/constants/tokens";
+import { usePrivy } from "@privy-io/react-auth";
+import { BrowserProvider } from "ethers";
 
 export const useSwap = () => {
+  const { user } = usePrivy();
   const [sellToken, setSellToken] = useState<Token>(TOKENS.LEXA);
   const [receiveToken, setReceiveToken] = useState<Token>(TOKENS.BNB);
   const [sellAmount, setSellAmount] = useState("");
@@ -28,16 +31,24 @@ export const useSwap = () => {
 
       setIsLoadingQuote(true);
       try {
-        const quoteData = await swapService.getSwapQuote(
-          sellToken.symbol,
-          receiveToken.symbol,
+        const quoteData = await pancakeSwapService.getSwapQuote(
+          sellToken.address,
+          receiveToken.address,
           sellAmount,
-          slippage,
+          parseFloat(slippage === "custom" ? customSlippage : slippage),
         );
-        setQuote(quoteData);
-        setReceiveAmount(quoteData.outputAmount);
+        setQuote({
+          inputAmount: quoteData.amountIn,
+          outputAmount: quoteData.amountOut,
+          exchangeRate: parseFloat(quoteData.amountOut) / parseFloat(quoteData.amountIn),
+          priceImpact: quoteData.priceImpact,
+          minimumReceived: quoteData.minimumAmountOut,
+          fee: "0",
+        });
+        setReceiveAmount(quoteData.amountOut);
       } catch (error) {
         console.error("Error fetching quote:", error);
+        setQuote(null);
       } finally {
         setIsLoadingQuote(false);
       }
@@ -45,7 +56,7 @@ export const useSwap = () => {
 
     const debounceTimer = setTimeout(fetchQuote, 500);
     return () => clearTimeout(debounceTimer);
-  }, [sellAmount, sellToken, receiveToken, slippage]);
+  }, [sellAmount, sellToken, receiveToken, slippage, customSlippage]);
 
   const swapTokens = useCallback(() => {
     const tempToken = sellToken;
@@ -72,34 +83,75 @@ export const useSwap = () => {
   const executeSwap = useCallback(
     async (walletAddress: string) => {
       if (!sellAmount || parseFloat(sellAmount) === 0) return;
+      if (!user?.wallet?.address) {
+        console.error("Wallet not connected");
+        setTransactionStatus("error");
+        return;
+      }
 
       setTransactionStatus("loading");
 
       try {
-        const result = await swapService.executeSwap(
-          sellToken.symbol,
-          receiveToken.symbol,
-          sellAmount,
-          receiveAmount,
-          slippage,
-          walletAddress,
-        );
+        const effectiveSlippage = slippage === "custom" ? customSlippage : slippage;
 
-        if (result.status === "success") {
-          setTransactionStatus("success");
-          // Clear amounts after successful swap
-          setSellAmount("");
-          setReceiveAmount("");
-          setQuote(null);
-        } else {
-          setTransactionStatus("error");
+        // Prepare swap transaction
+        const preparedSwap = await pancakeSwapService.prepareSwapTransaction({
+          tokenIn: sellToken.address,
+          tokenOut: receiveToken.address,
+          amountIn: sellAmount,
+          slippage: parseFloat(effectiveSlippage),
+          walletAddress,
+        });
+
+        // Get the signer from Privy
+        const provider = new BrowserProvider(window.ethereum!);
+        const signer = await provider.getSigner();
+
+        // Execute approval transaction if needed
+        if (preparedSwap.approval) {
+          console.log("Executing approval transaction...");
+          const approveTx = {
+            to: preparedSwap.approval.to,
+            data: preparedSwap.approval.data,
+          };
+
+          const approveTxResponse = await signer.sendTransaction(approveTx);
+          const approveReceipt = await approveTxResponse.wait();
+          
+          if (!approveReceipt || approveReceipt.status === 0) {
+            throw new Error("Approval transaction failed");
+          }
+          console.log("Approval successful:", approveReceipt.hash);
         }
+
+        // Execute swap transaction
+        console.log("Executing swap transaction...");
+        const swapTx = {
+          to: preparedSwap.swap.to,
+          data: preparedSwap.swap.data,
+          value: preparedSwap.swap.value,
+        };
+
+        const swapTxResponse = await signer.sendTransaction(swapTx);
+        const swapReceipt = await swapTxResponse.wait();
+
+        if (!swapReceipt || swapReceipt.status === 0) {
+          throw new Error("Swap transaction failed");
+        }
+
+        console.log("Swap successful:", swapReceipt.hash);
+        setTransactionStatus("success");
+        
+        // Clear amounts after successful swap
+        setSellAmount("");
+        setReceiveAmount("");
+        setQuote(null);
       } catch (error) {
         console.error("Error executing swap:", error);
         setTransactionStatus("error");
       }
     },
-    [sellToken, receiveToken, sellAmount, receiveAmount, slippage],
+    [sellToken, receiveToken, sellAmount, slippage, customSlippage, user],
   );
 
   const resetTransaction = useCallback(() => {
