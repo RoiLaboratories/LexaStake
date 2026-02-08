@@ -74,26 +74,26 @@ export default function SwapPage() {
     }
   }, [user, walletAddress]);
 
-  // Fetch balances when authenticated and address available
+  // Fetch LEXA and BNB balances in one call when authenticated
   useEffect(() => {
     if (!authenticated || !walletAddress) return;
 
     const fetchBalances = async () => {
       try {
-        // Fetch sell token balance
-        const sellBalanceData = await swapService.getWalletBalance(
-          walletAddress,
-          sellToken.address,
-        );
-        setSellTokenBalance(sellBalanceData.balance);
-        updateBalance(sellBalanceData.balance);
+        // Single API call for both LEXA and BNB (uses Alchemy first when configured)
+        const allBalances = await swapService.getAllBalances(walletAddress);
+        const bnbEntry = allBalances.find((b) => b.token === "BNB");
+        const lexaEntry = allBalances.find((b) => b.token === "LEXA");
+        const bnbBalance = bnbEntry?.balance ?? "0";
+        const lexaBalance = lexaEntry?.balance ?? "0";
 
-        // Fetch receive token balance
-        const receiveBalanceData = await swapService.getWalletBalance(
-          walletAddress,
-          receiveToken.address,
+        setSellTokenBalance(
+          sellToken.symbol === "BNB" ? bnbBalance : lexaBalance
         );
-        setReceiveTokenBalance(receiveBalanceData.balance);
+        setReceiveTokenBalance(
+          receiveToken.symbol === "BNB" ? bnbBalance : lexaBalance
+        );
+        updateBalance(sellToken.symbol === "BNB" ? bnbBalance : lexaBalance);
       } catch (error) {
         console.error("Error fetching balances:", error);
       }

@@ -9,22 +9,32 @@ const BSC_RPC_URLS = (() => {
   
   // Add Alchemy if API key is available
   if (process.env.ALCHEMY_API_KEY) {
-    urls.push(`https://bsc-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`);
+    urls.push(`https://bnb-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`);
   }
   
   // Add fallback public endpoints
   urls.push(
-    "https://bsc-dataseed2.binance.org:443",
-    "https://bsc-dataseed3.binance.org:443",
-    "https://bsc-dataseed4.binance.org:443",
-    "https://bsc.meowrpc.com",
-    "https://endpoints.omnirpc.io/bsc",
+    "https://bsc-dataseed1.binance.org",
+    "https://bsc-dataseed2.binance.org",
+    "https://bsc.publicnode.com",
+    "https://rpc.ankr.com/bsc",
   );
   
   return urls;
 })();
 
+const BSC_NETWORK = ethers.Network.from({ chainId: 56, name: "binance" });
 const BSC_RPC_URL = BSC_RPC_URLS[0];
+
+/** BSC has no ENS; use a runner that never resolves names so contract calls don't throw */
+function makeBscRunner(provider: ethers.Provider): ethers.ContractRunner {
+  return {
+    provider,
+    call: (tx: ethers.TransactionRequest) => provider.call(tx),
+    resolveName: (name: string) =>
+      Promise.resolve(ethers.isAddress(name) ? name : null),
+  };
+}
 
 // Minimal ABIs
 const ROUTER_ABI = [
@@ -75,11 +85,11 @@ export async function POST(request: NextRequest) {
       normalizedWalletAddress = walletAddress.toLowerCase();
     }
 
-    const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
+    const provider = new ethers.JsonRpcProvider(BSC_RPC_URL, BSC_NETWORK, { staticNetwork: true });
     const router = new ethers.Contract(
       PANCAKESWAP_ROUTER_ADDRESS,
       ROUTER_ABI,
-      provider,
+      makeBscRunner(provider),
     );
 
     // Build path with normalized addresses
@@ -94,11 +104,11 @@ export async function POST(request: NextRequest) {
     
     for (const rpcUrl of BSC_RPC_URLS) {
       try {
-        const rpcProvider = new ethers.JsonRpcProvider(rpcUrl);
+        const rpcProvider = new ethers.JsonRpcProvider(rpcUrl, BSC_NETWORK, { staticNetwork: true });
         const rpcRouter = new ethers.Contract(
           PANCAKESWAP_ROUTER_ADDRESS,
           ROUTER_ABI,
-          rpcProvider,
+          makeBscRunner(rpcProvider),
         );
         amounts = await rpcRouter.getAmountsOut(amountInWei, path);
         lastError = null;

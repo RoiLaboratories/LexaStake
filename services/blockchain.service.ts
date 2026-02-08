@@ -3,9 +3,12 @@ import { TOKENS } from "@/constants/tokens";
 
 // Fallback RPC endpoints for balance fetching (no Alchemy by default)
 const BSC_RPC_URLS = [
-  "https://bsc-dataseed2.binance.org:443",
-  "https://bsc-dataseed3.binance.org:443",
-  "https://bsc-dataseed4.binance.org:443",
+  "https://bsc-dataseed1.binance.org",
+  "https://bsc-dataseed2.binance.org",
+  "https://bsc-dataseed3.binance.org",
+  "https://bsc-dataseed4.binance.org",
+  "https://bsc.publicnode.com",
+  "https://rpc.ankr.com/bsc",
   "https://bsc.meowrpc.com",
   "https://endpoints.omnirpc.io/bsc",
 ];
@@ -13,7 +16,7 @@ const BSC_RPC_URLS = [
 // Alchemy endpoint as final fallback for balance fetching
 const getAlchemyUrl = (): string | null => {
   if (process.env.ALCHEMY_API_KEY) {
-    return `https://bsc-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
+    return `https://bnb-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`;
   }
   return null;
 };
@@ -50,10 +53,13 @@ class BlockchainService {
     this.initializeProvider();
   }
 
+  /** RPC call timeout (public RPCs can be slow) */
+  private static RPC_TIMEOUT_MS = 12000;
+
   /**
    * Wrap a promise with a timeout
    */
-  private withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> {
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number = BlockchainService.RPC_TIMEOUT_MS): Promise<T> {
     return Promise.race([
       promise,
       new Promise<T>((_, reject) =>
@@ -64,16 +70,11 @@ class BlockchainService {
 
   private initializeProvider() {
     if (this.currentRpcIndex < BSC_RPC_URLS.length) {
-      // Use JsonRpcProvider with network pre-defined to avoid network detection delays
-      const network = {
-        chainId: 56,
-        name: "binance",
-      };
       this.provider = new ethers.JsonRpcProvider(
         BSC_RPC_URLS[this.currentRpcIndex],
-        network,
+        BSC_NETWORK,
         { staticNetwork: true }
-      ) as any;
+      ) as ethers.JsonRpcProvider;
     }
   }
 
@@ -82,16 +83,18 @@ class BlockchainService {
     if (this.currentRpcIndex >= BSC_RPC_URLS.length) {
       this.currentRpcIndex = 0;
     }
-    // Use JsonRpcProvider with network pre-defined to avoid network detection delays
-    const network = {
-      chainId: 56,
-      name: "binance",
-    };
     this.provider = new ethers.JsonRpcProvider(
       BSC_RPC_URLS[this.currentRpcIndex],
-      network,
+      BSC_NETWORK,
       { staticNetwork: true }
-    ) as any;
+    ) as ethers.JsonRpcProvider;
+  }
+
+  /** Create a provider that skips network detection (avoids "failed to detect network" timeouts) */
+  private createStaticProvider(url: string): ethers.JsonRpcProvider {
+    return new ethers.JsonRpcProvider(url, BSC_NETWORK, {
+      staticNetwork: true,
+    }) as ethers.JsonRpcProvider;
   }
 
   /**
@@ -102,8 +105,42 @@ class BlockchainService {
     tokenAddress: string,
   ): Promise<string> {
     let lastError: Error | null = null;
-    
-    // Try public RPC endpoints first
+
+    // When Alchemy is configured, try it first (fast and reliable)
+    const alchemyUrl = getAlchemyUrl();
+    if (alchemyUrl) {
+      try {
+        const alchemyProvider = this.createStaticProvider(alchemyUrl);
+        let validWallet: string;
+        try {
+          validWallet = ethers.getAddress(walletAddress);
+        } catch {
+          validWallet = walletAddress.toLowerCase();
+        }
+
+        if (tokenAddress.toLowerCase() === "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c") {
+          const balance = await this.withTimeout(alchemyProvider.getBalance(validWallet));
+          return ethers.formatEther(balance);
+        }
+
+        let validToken: string;
+        try {
+          validToken = ethers.getAddress(tokenAddress);
+        } catch {
+          validToken = tokenAddress.toLowerCase();
+        }
+
+        const contract = new ethers.Contract(validToken, ERC20_ABI, alchemyProvider);
+        const [balance, decimals] = await this.withTimeout(
+          Promise.all([contract.balanceOf(validWallet), contract.decimals()])
+        );
+        return ethers.formatUnits(balance, decimals);
+      } catch (alchemyError) {
+        console.warn("Alchemy balance fetch failed, trying public RPCs:", alchemyError);
+      }
+    }
+
+    // Try public RPC endpoints
     for (let attempt = 0; attempt < BSC_RPC_URLS.length; attempt++) {
       try {
         if (!this.provider) {
@@ -129,7 +166,7 @@ class BlockchainService {
           "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"
         ) {
           // Fetch native BNB balance with timeout
-          const balance = await this.withTimeout(provider.getBalance(validWallet), 5000);
+          const balance = await this.withTimeout(provider.getBalance(validWallet));
           return ethers.formatEther(balance);
         }
 
@@ -153,8 +190,7 @@ class BlockchainService {
           Promise.all([
             contract.balanceOf(validWallet),
             contract.decimals(),
-          ]),
-          5000
+          ])
         );
 
         // Convert to human-readable format
@@ -176,14 +212,11 @@ class BlockchainService {
       }
     }
 
-    // All public RPCs failed, try Alchemy as last resort
-    const alchemyUrl = getAlchemyUrl();
-    if (alchemyUrl) {
+    // Try Alchemy again when configured (fallback after public RPCs failed)
+    const alchemyUrlFallback = getAlchemyUrl();
+    if (alchemyUrlFallback) {
       try {
-        console.warn("All public RPC endpoints failed, trying Alchemy endpoint...");
-        const alchemyProvider = new ethers.JsonRpcProvider(alchemyUrl, BSC_NETWORK);
-        
-        // Validate wallet address with fallback to lowercase
+        const alchemyProvider = this.createStaticProvider(alchemyUrlFallback);
         let validWallet: string;
         try {
           validWallet = ethers.getAddress(walletAddress);
@@ -191,13 +224,11 @@ class BlockchainService {
           validWallet = walletAddress.toLowerCase();
         }
 
-        // Check if it's BNB
         if (tokenAddress.toLowerCase() === "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c") {
-          const balance = await this.withTimeout(alchemyProvider.getBalance(validWallet), 5000);
+          const balance = await this.withTimeout(alchemyProvider.getBalance(validWallet));
           return ethers.formatEther(balance);
         }
 
-        // For ERC20 tokens
         let validToken: string;
         try {
           validToken = ethers.getAddress(tokenAddress);
@@ -207,8 +238,7 @@ class BlockchainService {
 
         const contract = new ethers.Contract(validToken, ERC20_ABI, alchemyProvider);
         const [balance, decimals] = await this.withTimeout(
-          Promise.all([contract.balanceOf(validWallet), contract.decimals()]),
-          5000
+          Promise.all([contract.balanceOf(validWallet), contract.decimals()])
         );
         return ethers.formatUnits(balance, decimals);
       } catch (alchemyError) {
@@ -257,6 +287,26 @@ class BlockchainService {
   async getLexaAndBNBBalances(
     walletAddress: string,
   ): Promise<{ lexa: string; bnb: string }> {
+    // When Alchemy is configured, try it first (avoids public RPC timeouts)
+    const alchemyUrl = getAlchemyUrl();
+    if (alchemyUrl) {
+      try {
+        const alchemyProvider = this.createStaticProvider(alchemyUrl);
+        let validWallet: string;
+        try {
+          validWallet = ethers.getAddress(walletAddress);
+        } catch {
+          validWallet = walletAddress.toLowerCase();
+        }
+        const bnbBalanceWei = await this.withTimeout(alchemyProvider.getBalance(validWallet));
+        const bnbBalance = ethers.formatEther(bnbBalanceWei);
+        const lexaBalance = await this.getTokenBalance(walletAddress, TOKENS.LEXA.address);
+        return { lexa: lexaBalance, bnb: bnbBalance };
+      } catch (alchemyError) {
+        console.warn("Alchemy LEXA/BNB fetch failed, trying public RPCs:", alchemyError);
+      }
+    }
+
     let lastError: Error | null = null;
     const maxAttempts = BSC_RPC_URLS.length;
 
@@ -271,10 +321,16 @@ class BlockchainService {
           throw new Error("Failed to initialize RPC provider");
         }
 
-        const validWallet = ethers.getAddress(walletAddress);
+        // Validate wallet address (Privy may return non-checksummed addresses)
+        let validWallet: string;
+        try {
+          validWallet = ethers.getAddress(walletAddress);
+        } catch {
+          validWallet = walletAddress.toLowerCase();
+        }
 
         // Fetch BNB balance (native currency) with timeout
-        const bnbBalanceWei = await this.withTimeout(provider.getBalance(validWallet), 5000);
+        const bnbBalanceWei = await this.withTimeout(provider.getBalance(validWallet));
         const bnbBalance = ethers.formatEther(bnbBalanceWei);
 
         // Fetch LEXA balance (token contract)
@@ -303,23 +359,21 @@ class BlockchainService {
       }
     }
 
-    // All public RPCs failed, try Alchemy as last resort
-    const alchemyUrl = getAlchemyUrl();
-    if (alchemyUrl) {
+    // Try Alchemy when configured (fallback)
+    const alchemyUrlFallback = getAlchemyUrl();
+    if (alchemyUrlFallback) {
       try {
-        console.warn("All public RPC endpoints failed, trying Alchemy endpoint...");
-        const alchemyProvider = new ethers.JsonRpcProvider(alchemyUrl, BSC_NETWORK);
-        const validWallet = ethers.getAddress(walletAddress);
-        
-        const bnbBalanceWei = await this.withTimeout(alchemyProvider.getBalance(validWallet), 5000);
+        const alchemyProvider = this.createStaticProvider(alchemyUrlFallback);
+        let validWallet: string;
+        try {
+          validWallet = ethers.getAddress(walletAddress);
+        } catch {
+          validWallet = walletAddress.toLowerCase();
+        }
+        const bnbBalanceWei = await this.withTimeout(alchemyProvider.getBalance(validWallet));
         const bnbBalance = ethers.formatEther(bnbBalanceWei);
-        
         const lexaBalance = await this.getTokenBalance(walletAddress, TOKENS.LEXA.address);
-        
-        return {
-          lexa: lexaBalance,
-          bnb: bnbBalance,
-        };
+        return { lexa: lexaBalance, bnb: bnbBalance };
       } catch (alchemyError) {
         console.error("Alchemy endpoint also failed:", alchemyError);
       }

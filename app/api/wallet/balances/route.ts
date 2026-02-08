@@ -3,7 +3,17 @@ import { blockchainService } from "@/services/blockchain.service";
 
 export async function POST(request: NextRequest) {
   try {
-    const { walletAddress } = await request.json();
+    let body: { walletAddress?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 },
+      );
+    }
+    const walletAddress =
+      typeof body?.walletAddress === "string" ? body.walletAddress.trim() : "";
 
     if (!walletAddress) {
       return NextResponse.json(

@@ -3,45 +3,83 @@ import { ethers } from "ethers";
 
 const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d2C564e90f37d778D30ecC84";
 
+const BSC_NETWORK = ethers.Network.from({ chainId: 56, name: "binance" });
+
 const BSC_RPC_URLS = (() => {
   const urls: string[] = [];
   
   // Add Alchemy FIRST for swap operations (most reliable)
   if (process.env.ALCHEMY_API_KEY) {
-    urls.push(`https://bsc-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`);
+    urls.push(`https://bnb-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`);
   }
   
-  // Add fallback public endpoints (less reliable)
+  // Fallback public endpoints (eth_call supported; meowrpc does not support eth_call)
   urls.push(
-    "https://bsc-dataseed2.binance.org:443",
-    "https://bsc-dataseed3.binance.org:443",
-    "https://bsc-dataseed4.binance.org:443",
+    "https://bsc-dataseed.bnbchain.org",
+    "https://bsc-dataseed1.binance.org",
+    "https://bsc-dataseed2.binance.org",
+    "https://bsc-dataseed1.defibit.io",
+    "https://bsc-dataseed1.ninicoin.io",
+    "https://bsc.publicnode.com",
+    "https://bsc.llamarpc.com",
+    "https://bsc-dataseed-public.bnbchain.org",
   );
   
   return urls;
 })();
 
-// Simple ABI for getAmountsOut function
-const ROUTER_ABI = [
+// Encode getAmountsOut and decode result manually. Use raw eth_call to avoid any provider ENS/populate logic (BSC doesn't support ENS).
+const ROUTER_IFACE = new ethers.Interface([
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
-];
+]);
+
+/** Normalize to 0x + 40 hex chars for eth_call (skip EIP-55 checksum to avoid INVALID_ARGUMENT) */
+function toHexAddress(addr: string): string {
+  const hex = (addr.startsWith("0x") ? addr.slice(2) : addr).toLowerCase().replace(/[^0-9a-f]/g, "");
+  if (hex.length < 40) {
+    throw new Error(`Invalid address: need 40 hex chars, got ${hex.length}`);
+  }
+  return "0x" + hex.slice(0, 40);
+}
+
+const RPC_FETCH_MS = 15_000;
+
+async function ethCall(rpcUrl: string, to: string, data: string): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RPC_FETCH_MS);
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_call",
+      params: [{ to, data }, "latest"],
+    }),
+    signal: controller.signal,
+  });
+  clearTimeout(timeout);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || "RPC error");
+  return json.result ?? "0x";
+}
 
 async function getAmountsOutWithFallback(
   path: string[],
   amountIn: bigint,
 ): Promise<bigint[]> {
+  const calldata = ROUTER_IFACE.encodeFunctionData("getAmountsOut", [amountIn, path]);
+  const to = toHexAddress(PANCAKESWAP_ROUTER_ADDRESS);
   let lastError: Error | null = null;
 
   for (const rpcUrl of BSC_RPC_URLS) {
     try {
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
-      const router = new ethers.Contract(
-        PANCAKESWAP_ROUTER_ADDRESS,
-        ROUTER_ABI,
-        provider,
-      );
-
-      const amounts = await router.getAmountsOut(amountIn, path);
+      const result = await ethCall(rpcUrl, to, calldata);
+      if (!result || result === "0x") {
+        throw new Error("Empty RPC response");
+      }
+      const amounts = ROUTER_IFACE.decodeFunctionResult("getAmountsOut", result)[0] as bigint[];
       return amounts;
     } catch (error) {
       lastError = error as Error;
@@ -71,15 +109,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalize addresses to proper checksum format
-    const normalizedPath = path.map((addr: string) => {
-      try {
-        return ethers.getAddress(addr);
-      } catch {
-        // If checksum fails, use lowercase (still valid for contract calls)
-        return addr.toLowerCase();
-      }
-    });
+    // Normalize each path address to 0x + 40 hex (avoids checksum errors, valid for contract calls)
+    const normalizedPath = path.map((addr: string) => toHexAddress(addr));
 
     // Convert amountIn to wei
     let amountInWei: bigint;

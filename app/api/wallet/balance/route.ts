@@ -3,13 +3,21 @@ import { blockchainService } from "@/services/blockchain.service";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { walletAddress, tokenAddress } = body;
-
-    console.log("Balance API called with:", { walletAddress, tokenAddress });
+    let body: { walletAddress?: string; tokenAddress?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 },
+      );
+    }
+    const walletAddress =
+      typeof body?.walletAddress === "string" ? body.walletAddress.trim() : "";
+    const tokenAddress =
+      typeof body?.tokenAddress === "string" ? body.tokenAddress.trim() : "";
 
     if (!walletAddress || !tokenAddress) {
-      console.error("Missing required parameters");
       return NextResponse.json(
         { error: "Missing walletAddress or tokenAddress" },
         { status: 400 },
