@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 
-const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d2C564e90f37d778D30ecC84";
+const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 
 const BSC_NETWORK = ethers.Network.from({ chainId: 56, name: "binance" });
 
@@ -33,67 +33,160 @@ const ROUTER_IFACE = new ethers.Interface([
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
 ]);
 
-/** Normalize to 0x + 40 hex chars for eth_call (skip EIP-55 checksum to avoid INVALID_ARGUMENT) */
-function toHexAddress(addr: string): string {
-  const hex = (addr.startsWith("0x") ? addr.slice(2) : addr).toLowerCase().replace(/[^0-9a-f]/g, "");
-  if (hex.length < 40) {
-    throw new Error(`Invalid address: need 40 hex chars, got ${hex.length}`);
+/** Validate and normalize address to 0x + 40 hex chars */
+function validateAddress(addr: string): string {
+  if (!addr || typeof addr !== "string") {
+    throw new Error("Address must be a non-empty string");
   }
-  return "0x" + hex.slice(0, 40);
+  
+  const trimmed = addr.trim();
+  
+  // Check if it looks like an address (0x followed by 40 hex chars)
+  if (!/^0x[a-fA-F0-9]{40}$/i.test(trimmed)) {
+    throw new Error(`Invalid address format: ${addr}`);
+  }
+  
+  try {
+    // Use ethers.js to validate and checksum the address
+    return ethers.getAddress(trimmed);
+  } catch (e) {
+    // If checksum fails but format is valid, just return lowercase
+    return trimmed.toLowerCase();
+  }
 }
 
-const RPC_FETCH_MS = 15_000;
+/** Normalize to 0x + 40 hex chars for eth_call (skip EIP-55 checksum to avoid INVALID_ARGUMENT) */
+function toHexAddress(addr: string): string {
+  const validated = validateAddress(addr);
+  return validated.toLowerCase();
+}
+
+const RPC_FETCH_MS = 12_000;
+
+/** Ensure address is properly formatted as 0x + 40 lowercase hex chars */
+function formatAddressForRpc(addr: string): string {
+  // Remove any whitespace
+  const trimmed = addr.trim();
+  
+  // Ensure it starts with 0x
+  const withPrefix = trimmed.startsWith("0x") ? trimmed : "0x" + trimmed;
+  
+  // Remove 0x, convert to lowercase, and ensure exactly 40 hex chars
+  const hex = withPrefix.slice(2).toLowerCase();
+  
+  if (hex.length !== 40) {
+    throw new Error(`Address must be exactly 40 hex characters (got ${hex.length}): ${addr}`);
+  }
+  
+  return "0x" + hex;
+}
 
 async function ethCall(rpcUrl: string, to: string, data: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), RPC_FETCH_MS);
-  const res = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_call",
-      params: [{ to, data }, "latest"],
-    }),
-    signal: controller.signal,
-  });
-  clearTimeout(timeout);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message || "RPC error");
-  return json.result ?? "0x";
+  try {
+    // Ensure address is properly formatted for RPC
+    const formattedTo = formatAddressForRpc(to);
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), RPC_FETCH_MS);
+    
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [{ to: formattedTo, data }, "latest"],
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeout);
+    
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    
+    const json = await res.json();
+    
+    if (json.error) {
+      throw new Error(`RPC error: ${json.error.message || JSON.stringify(json.error)}`);
+    }
+    
+    const result = json.result;
+    
+    // Log empty responses for debugging
+    if (!result || result === "0x") {
+      console.debug(`eth_call returned empty result from ${rpcUrl.substring(0, 60)}... (to: ${formattedTo}, data: ${data.substring(0, 100)}...)`);
+      throw new Error(`eth_call returned empty data (0x) - contract may not exist or call reverted`);
+    }
+    
+    return result;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(String(error));
+  }
 }
 
 async function getAmountsOutWithFallback(
   path: string[],
   amountIn: bigint,
 ): Promise<bigint[]> {
-  const calldata = ROUTER_IFACE.encodeFunctionData("getAmountsOut", [amountIn, path]);
-  const to = toHexAddress(PANCAKESWAP_ROUTER_ADDRESS);
-  let lastError: Error | null = null;
+  // Validate all addresses in the path
+  const validatedPath: string[] = [];
+  for (let i = 0; i < path.length; i++) {
+    try {
+      validatedPath.push(validateAddress(path[i]));
+    } catch (error) {
+      throw new Error(`Invalid address at path[${i}]: ${path[i]} - ${(error as Error).message}`);
+    }
+  }
+  
+  // Encode function call with validated addresses (ethers.js will handle checksumming)
+  const calldata = ROUTER_IFACE.encodeFunctionData("getAmountsOut", [amountIn, validatedPath]);
+  const to = PANCAKESWAP_ROUTER_ADDRESS.toLowerCase();
+  
+  console.log(`Calling getAmountsOut on router ${to} with path: [${validatedPath.join(", ")}] and amountIn: ${amountIn}`);
+  console.log(`Encoded call data: ${calldata}`);
+  
+  const errors: Map<string, string> = new Map();
 
-  for (const rpcUrl of BSC_RPC_URLS) {
+  // Try each RPC endpoint with a short delay between attempts
+  for (let i = 0; i < BSC_RPC_URLS.length; i++) {
+    const rpcUrl = BSC_RPC_URLS[i];
+    
     try {
       const result = await ethCall(rpcUrl, to, calldata);
-      if (!result || result === "0x") {
-        throw new Error("Empty RPC response");
-      }
+      
+      // Successful call - decode the result
       const amounts = ROUTER_IFACE.decodeFunctionResult("getAmountsOut", result)[0] as bigint[];
+      console.log(`Successfully fetched amounts from RPC ${i + 1}: ${rpcUrl.substring(0, 50)}... Result: [${amounts.join(", ")}]`);
       return amounts;
     } catch (error) {
-      lastError = error as Error;
-      console.warn(`RPC ${rpcUrl} failed:`, (error as Error).message);
-      continue;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      errors.set(rpcUrl.split("//")[1] || rpcUrl, errorMsg);
+      console.warn(`RPC ${i + 1}/${BSC_RPC_URLS.length} (${rpcUrl.substring(0, 50)}...) failed: ${errorMsg}`);
+      
+      // Add small delay between retries (except on last attempt)
+      if (i < BSC_RPC_URLS.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
     }
   }
 
-  throw lastError || new Error("All RPC endpoints failed");
+  // All RPCs failed
+  const errorSummary = Array.from(errors.entries())
+    .map(([url, msg]) => `${url}: ${msg}`)
+    .join("; ");
+  
+  throw new Error(`All RPC endpoints failed to fetch amounts. Errors: ${errorSummary}`);
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { path, amountIn } = await request.json();
+    const { path, amountIn, slippage } = await request.json();
 
     if (!path || !amountIn) {
       return NextResponse.json(
@@ -109,8 +202,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalize each path address to 0x + 40 hex (avoids checksum errors, valid for contract calls)
-    const normalizedPath = path.map((addr: string) => toHexAddress(addr));
+    // Validate path addresses (don't normalize yet - encodeFunctionData needs proper format)
+    try {
+      for (let i = 0; i < path.length; i++) {
+        validateAddress(path[i]);
+      }
+    } catch (error) {
+      return NextResponse.json(
+        { error: `Invalid address in path: ${(error as Error).message}` },
+        { status: 400 },
+      );
+    }
 
     // Convert amountIn to wei
     let amountInWei: bigint;
@@ -123,22 +225,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use provided slippage or default to 0.5%
+    const slippagePercentage = slippage ?? 0.5;
+
     try {
       // Get amounts out with fallback RPC support
-      const amounts = await getAmountsOutWithFallback(normalizedPath, amountInWei);
+      const amounts = await getAmountsOutWithFallback(path, amountInWei);
       const amountOut = ethers.formatEther(amounts[amounts.length - 1]);
 
-      // Calculate minimum amount with slippage (default 0.5%)
-      const slippage = 0.5; // 0.5%
+      // Calculate minimum amount with provided slippage (or default 0.5%)
       const minimumAmountOut = (
         parseFloat(amountOut) *
-        (1 - slippage / 100)
+        (1 - slippagePercentage / 100)
       ).toString();
 
       // Calculate price impact
       const inputValue = parseFloat(amountIn);
       const outputValue = parseFloat(amountOut);
       const priceImpact = (inputValue - outputValue) / inputValue * 100;
+
+      // Normalize addresses for response
+      const normalizedPath = path.map((addr: string) => validateAddress(addr).toLowerCase());
 
       return NextResponse.json({
         amountIn,
@@ -148,11 +255,17 @@ export async function POST(request: NextRequest) {
         path: normalizedPath,
       });
     } catch (rpcError) {
+      const errorMsg = rpcError instanceof Error ? rpcError.message : String(rpcError);
+      console.error("RPC error fetching swap quote:", errorMsg);
+      
       // Fallback: return mock quote for development
-      console.warn("RPC failed, returning mock quote:", (rpcError as Error).message);
+      console.warn("RPC failed, returning mock quote for development purposes");
       
       const mockAmountOut = (parseFloat(amountIn) * 0.9).toString(); // Assume 10% slippage for mock
-      const minimumAmountOut = (parseFloat(amountIn) * 0.895).toString();
+      const minimumAmountOut = (parseFloat(mockAmountOut) * (1 - slippagePercentage / 100)).toString();
+
+      // Normalize addresses for response
+      const normalizedPath = path.map((addr: string) => validateAddress(addr).toLowerCase());
 
       return NextResponse.json({
         amountIn,
@@ -160,7 +273,8 @@ export async function POST(request: NextRequest) {
         minimumAmountOut,
         priceImpact: 10,
         path: normalizedPath,
-      });
+        warning: "Using mock quote - RPC unavailable",
+      }, { status: 200 });
     }
   } catch (error) {
     console.error("Error fetching swap quote:", error);

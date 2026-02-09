@@ -3,7 +3,7 @@ import { TOKENS } from "@/constants/tokens";
 
 // PancakeSwap Router V2 address on BSC mainnet
 export const PANCAKESWAP_ROUTER_ADDRESS =
-  "0x10ED43C718714eb63d2C564e90f37d778D30ecC84";
+  "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 
 // PancakeSwap Router V2 ABI (relevant functions)
 export const PANCAKESWAP_ROUTER_ABI = [
@@ -191,6 +191,7 @@ class PancakeSwapService {
         body: JSON.stringify({
           path,
           amountIn,
+          slippage,
         }),
       });
 

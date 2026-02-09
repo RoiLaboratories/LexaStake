@@ -11,6 +11,7 @@ interface TransactionNotificationProps {
   receiveAmount?: string;
   receiveToken?: string;
   onClose: () => void;
+  errorMessage?: string | null;
 }
 
 export default function TransactionNotification({
@@ -21,6 +22,7 @@ export default function TransactionNotification({
   receiveAmount,
   receiveToken,
   onClose,
+  errorMessage,
 }: TransactionNotificationProps) {
   return (
     <AnimatePresence>
@@ -99,12 +101,11 @@ export default function TransactionNotification({
                     Token swap failed!
                   </h3>
                 </div>
-                <p className="text-gray-400 text-sm mb-4 leading-relaxed">
-                  Insufficient balance to perform the swap, deposit{" "}
-                  {sellToken || "tokens"} to continue
+                <p className="text-gray-300 text-sm mb-4 leading-relaxed whitespace-pre-wrap">
+                  {errorMessage || "An unknown error occurred during the swap"}
                 </p>
                 <button className="w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors">
-                  View transaction
+                  Try again
                 </button>
               </div>
             )}

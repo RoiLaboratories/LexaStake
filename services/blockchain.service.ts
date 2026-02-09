@@ -88,6 +88,7 @@ class BlockchainService {
       BSC_NETWORK,
       { staticNetwork: true }
     ) as ethers.JsonRpcProvider;
+    console.log(`Switched to RPC endpoint ${this.currentRpcIndex + 1}: ${BSC_RPC_URLS[this.currentRpcIndex].substring(0, 50)}...`);
   }
 
   /** Create a provider that skips network detection (avoids "failed to detect network" timeouts) */
@@ -200,7 +201,7 @@ class BlockchainService {
         lastError = error as Error;
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.warn(
-          `RPC attempt ${attempt + 1} (${BSC_RPC_URLS[this.currentRpcIndex]}) failed: ${errorMessage}`,
+          `RPC attempt ${attempt + 1}/${BSC_RPC_URLS.length} (${BSC_RPC_URLS[this.currentRpcIndex].substring(0, 50)}...) failed: ${errorMessage}`,
         );
 
         // Try next RPC endpoint
@@ -347,7 +348,7 @@ class BlockchainService {
         lastError = error as Error;
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.warn(
-          `RPC attempt ${attempt + 1} (${BSC_RPC_URLS[this.currentRpcIndex]}) failed: ${errorMessage}`,
+          `RPC attempt ${attempt + 1}/${maxAttempts} (${BSC_RPC_URLS[this.currentRpcIndex].substring(0, 50)}...) failed: ${errorMessage}`,
         );
 
         // Try next RPC endpoint

@@ -19,5 +19,5 @@ export const TOKENS: Record<string, Token> = {
   // Add more tokens as needed
 };
 
-export const DEFAULT_SLIPPAGE = "0.2";
-export const SLIPPAGE_OPTIONS = ["0.1", "0.2", "0.5"];
+export const DEFAULT_SLIPPAGE = "15"; // 15% slippage accounts for LEXA's 5% tax + volatility + fees
+export const SLIPPAGE_OPTIONS = ["5", "6", "7", "10", "15", "20"];

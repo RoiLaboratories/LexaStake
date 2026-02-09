@@ -30,7 +30,6 @@ export default function SwapPage() {
   const [showNotification, setShowNotification] = useState(false);
   const [sellTokenBalance, setSellTokenBalance] = useState<string | null>(null);
   const [receiveTokenBalance, setReceiveTokenBalance] = useState<string | null>(null);
-  const [pendingNotification, setPendingNotification] = useState(false);
 
   const { authenticated, user, login } = usePrivy();
 
@@ -41,9 +40,12 @@ export default function SwapPage() {
     receiveAmount,
     slippage,
     customSlippage,
+    quote,
     transactionStatus,
     balance,
     isLoadingQuote,
+    prices,
+    errorMessage,
     setSellAmount,
     setReceiveAmount,
     setSlippage,
@@ -104,35 +106,36 @@ export default function SwapPage() {
 
   // Handle transaction notifications
   useEffect(() => {
+    console.log("🔔 Modal visibility effect triggered - transactionStatus:", transactionStatus);
+    
     const isActive =
       transactionStatus === "loading" ||
       transactionStatus === "success" ||
       transactionStatus === "error";
     
     if (!isActive) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPendingNotification(false);
+      console.log("Modal becoming inactive, hiding");
+      setShowNotification(false);
       return;
     }
 
-    setPendingNotification(true);
+    // Show notification for loading, success, and error states
+    console.log("Modal becoming active, showing");
+    setShowNotification(true);
 
-    if (transactionStatus !== "loading") {
+    // Auto-hide success/error after 5 seconds
+    if (transactionStatus === "success" || transactionStatus === "error") {
+      console.log("Setting 5s timer to auto-close modal");
       const timer = setTimeout(() => {
+        console.log("5s timer fired, closing modal and resetting");
         setShowNotification(false);
-        setPendingNotification(false);
         resetTransaction();
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [transactionStatus, resetTransaction]);
 
-  useEffect(() => {
-    if (pendingNotification) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowNotification(true);
-    }
-  }, [pendingNotification]);
+    // Keep loading notification visible indefinitely
+  }, [transactionStatus, resetTransaction]);
 
   const handleSlippageSelect = (value: string) => {
     setSlippage(value);
@@ -150,6 +153,10 @@ export default function SwapPage() {
   };
 
   const closeNotification = () => {
+    // Don't allow closing the notification during loading
+    if (transactionStatus === "loading") {
+      return;
+    }
     setShowNotification(false);
     resetTransaction();
   };
@@ -176,6 +183,7 @@ export default function SwapPage() {
         receiveAmount={receiveAmount}
         receiveToken={receiveToken.symbol}
         onClose={closeNotification}
+        errorMessage={errorMessage}
       />
 
       {/* Settings Modal */}
@@ -213,6 +221,9 @@ export default function SwapPage() {
                 token={sellToken}
                 amount={sellAmount}
                 balance={balance}
+                tokenPrice={
+                  sellToken.symbol === "BNB" ? prices.bnb : prices.lexa
+                }
                 onAmountChange={setSellAmount}
                 onMaxClick={handleMaxAmount}
                 onPercentageClick={handlePercentage}
@@ -242,6 +253,9 @@ export default function SwapPage() {
                 token={receiveToken}
                 amount={receiveAmount}
                 balance={receiveTokenBalance || "0"}
+                tokenPrice={
+                  receiveToken.symbol === "BNB" ? prices.bnb : prices.lexa
+                }
                 onAmountChange={setReceiveAmount}
                 disabled={!authenticated}
                 showBalance={true}

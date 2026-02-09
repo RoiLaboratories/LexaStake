@@ -7,6 +7,7 @@ interface SwapInputProps {
   token: Token;
   amount: string;
   balance?: string;
+  tokenPrice?: number;
   onAmountChange: (value: string) => void;
   onTokenClick?: () => void;
   onMaxClick?: () => void;
@@ -21,6 +22,7 @@ export default function SwapInput({
   token,
   amount,
   balance,
+  tokenPrice,
   onAmountChange,
   onTokenClick,
   onMaxClick,
@@ -30,6 +32,19 @@ export default function SwapInput({
   isLoading = false,
 }: SwapInputProps) {
   const borderRadius = label === "Sell" ? "rounded-t-2xl" : "rounded-b-2xl";
+  
+  // Calculate USD value
+  const calculateUsdValue = (): string => {
+    if (!amount || !tokenPrice || tokenPrice === 0) {
+      return "$0.00";
+    }
+    
+    const usdValue = parseFloat(amount) * tokenPrice;
+    return "$" + usdValue.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
   return (
     <div className={`bg-[#151617] ${borderRadius} p-4 sm:p-5`}>
       {/* Header */}
@@ -86,7 +101,7 @@ export default function SwapInput({
             className="bg-transparent text-2xl sm:text-4xl text-white font-bold outline-none text-right w-full sm:w-48 placeholder:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <span className="text-gray-500 text-sm mt-1">
-            {isLoading ? "Loading..." : "~$0"}
+            {isLoading ? "Loading..." : calculateUsdValue()}
           </span>
         </div>
       </div>
