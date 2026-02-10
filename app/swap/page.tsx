@@ -33,6 +33,10 @@ export default function SwapPage() {
 
   const { authenticated, user, login } = usePrivy();
 
+  useEffect(() => {
+    console.log("📄 [SWAP_PAGE] Component mounted - console is working!");
+  }, []);
+
   const {
     sellToken,
     receiveToken,
@@ -148,8 +152,14 @@ export default function SwapPage() {
   };
 
   const handleSwap = async () => {
-    if (!walletAddress || transactionStatus === "loading") return;
+    console.log("🎯 [SWAP_PAGE] handleSwap clicked - starting swap process");
+    if (!walletAddress || transactionStatus === "loading") {
+      console.log("🎯 [SWAP_PAGE] handleSwap returning early:", { walletAddressDefined: !!walletAddress, transactionStatus });
+      return;
+    }
+    console.log("🎯 [SWAP_PAGE] Calling executeSwap with:", { walletAddress });
     await executeSwap(walletAddress);
+    console.log("🎯 [SWAP_PAGE] executeSwap completed");
   };
 
   const closeNotification = () => {

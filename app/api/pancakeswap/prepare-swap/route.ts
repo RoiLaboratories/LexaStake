@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 
 const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-const UNIVERSAL_ROUTER_ADDRESS = "0xd9C500DfF816a1Da21A48A732d3498Bf09dc9AEB";
 const WBNB_ADDRESS = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
 
 const BSC_RPC_URLS = (() => {
@@ -77,44 +76,17 @@ function makeBscRunner(provider: ethers.Provider): ethers.ContractRunner {
   };
 }
 
-// Minimal ABIs
+// Minimal ABIs for Router V2
 const ROUTER_ABI = [
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
+  "function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[] amounts)",
+  "function swapExactBNBForTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) payable returns (uint256[] amounts)",
+  "function swapExactTokensForBNB(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[] amounts)",
 ];
 
 const ERC20_ABI = [
   "function approve(address _spender, uint256 _value) returns (bool)",
 ];
-
-// UniversalRouter ABI (minimal - just execute function)
-const UNIVERSAL_ROUTER_ABI = [
-  {
-    inputs: [
-      { internalType: "bytes", name: "commands", type: "bytes" },
-      { internalType: "bytes[]", name: "inputs", type: "bytes[]" },
-      { internalType: "uint256", name: "deadline", type: "uint256" }
-    ],
-    name: "execute",
-    outputs: [{ internalType: "bytes[]", name: "", type: "bytes[]" }],
-    stateMutability: "payable",
-    type: "function"
-  }
-];
-
-// UniversalRouter command: V2_SWAP_EXACT_IN = 0x00
-function encodeV2SwapExactIn(
-  amountIn: string,
-  amountOutMin: string,
-  path: string[],
-  recipient: string,
-  payerIsUser: boolean = true
-): string {
-  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-  return abiCoder.encode(
-    ["uint256", "uint256", "address[]", "address", "bool"],
-    [amountIn, amountOutMin, path, recipient, payerIsUser]
-  );
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -239,72 +211,81 @@ export async function POST(request: NextRequest) {
     const deadline = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
     console.log(`⏰ Deadline set to: ${deadline} (${new Date(deadline * 1000).toISOString()})`);
 
-    // Determine which swap function to use based on input token
+    // ✅ Use PancakeSwap Router V2 for simple, direct swaps
+    console.log(`🔄 Using Router V2 for swap execution`);
+    
+    const routerIface = new ethers.Interface(ROUTER_ABI);
+
+    let swapData: string;
+    let txValue = "0";
+
+    // Determine which swap function to use based on input/output tokens
     const isBNBInput = normalizedTokenIn.toLowerCase() === WBNB_ADDRESS.toLowerCase();
     const isBNBOutput = normalizedTokenOut.toLowerCase() === WBNB_ADDRESS.toLowerCase();
 
     console.log(`🔄 Swap direction:`, {
       isBNBInput,
       isBNBOutput,
-      normalizedTokenIn: normalizedTokenIn.substring(0, 14) + "...",
-      normalizedTokenOut: normalizedTokenOut.substring(0, 14) + "...",
-      WBNB_ADDRESS: WBNB_ADDRESS.substring(0, 14) + "...",
     });
 
-    // We'll handle value (msg.value) differently for UniversalRouter
-    // If input is BNB, we need to wrap it first, so the caller sends value
-    const txValue = isBNBInput ? amountInWei.toString() : "0";
+    if (isBNBInput) {
+      // BNB to token: call swapExactBNBForTokens(payable)
+      console.log(`💰 BNB Input - Using swapExactBNBForTokens`);
+      swapData = routerIface.encodeFunctionData("swapExactBNBForTokens", [
+        minimumAmountOutWei.toString(),
+        path,
+        normalizedWalletAddress,
+        deadline,
+      ]);
+      txValue = amountInWei.toString();
+    } else if (isBNBOutput) {
+      // Token to BNB: call swapExactTokensForBNB
+      console.log(`🏦 BNB Output - Using swapExactTokensForBNB`);
+      swapData = routerIface.encodeFunctionData("swapExactTokensForBNB", [
+        amountInWei.toString(),
+        minimumAmountOutWei.toString(),
+        path,
+        normalizedWalletAddress,
+        deadline,
+      ]);
+    } else {
+      // Token to token: call swapExactTokensForTokens
+      console.log(`🔀 Token to Token - Using swapExactTokensForTokens`);
+      swapData = routerIface.encodeFunctionData("swapExactTokensForTokens", [
+        amountInWei.toString(),
+        minimumAmountOutWei.toString(),
+        path,
+        normalizedWalletAddress,
+        deadline,
+      ]);
+    }
 
-    console.log(`  minimumOut(Wei): ${minimumAmountOutWei.toString()}`);
-    console.log(`  path: [${path.join(", ")}]`);
-    console.log(`  recipient: ${normalizedWalletAddress}`);
-    console.log(`  deadline: ${deadline}`);
+    console.log(`✓ Encoded Router V2 swap call`);
+    console.log(`  Function: ${isBNBInput ? "swapExactBNBForTokens" : isBNBOutput ? "swapExactTokensForBNB" : "swapExactTokensForTokens"}`);
+    console.log(`  Input amount: ${ethers.formatEther(amountInWei)} ${isBNBInput ? "BNB" : "tokens"}`);
+    console.log(`  Minimum output: ${ethers.formatEther(minimumAmountOutWei)}`);
+    console.log(`  Path: [${path.map(p => p.substring(0, 14) + "...").join(" -> ")}]`);
+    console.log(`  Recipient: ${normalizedWalletAddress.substring(0, 14)}...`);
+    console.log(`  Deadline: ${deadline}`);
+    console.log(`  Value to send: ${txValue}`);
 
-    // ✅ Use UniversalRouter (like the official PancakeSwap does)
-    console.log(`🔄 Using UniversalRouter for swap execution`);
-    
-    // Encode V2_SWAP_EXACT_IN command for UniversalRouter
-    // Command: 0x00 (V2_SWAP_EXACT_IN)
-    // Always use payerIsUser=true since the user will provide the tokens
-    const swapInputData = encodeV2SwapExactIn(
-      amountInWei.toString(),
-      minimumAmountOutWei.toString(),
-      path,
-      normalizedWalletAddress,
-      true // payerIsUser
-    );
-
-    // Create the commands and inputs for UniversalRouter.execute
-    const commands = Uint8Array.from([0x00]); // V2_SWAP_EXACT_IN command
-    const inputs = [swapInputData];
-
-    // Encode the UniversalRouter.execute call
-    const universalRouterIface = new ethers.Interface(UNIVERSAL_ROUTER_ABI);
-    const swapData = universalRouterIface.encodeFunctionData("execute", [
-      commands,
-      inputs,
-      deadline
-    ]);
-
-    console.log(`✓ Encoded UniversalRouter swap: ${swapData}`);
-    console.log(`  Commands: [0x00 = V2_SWAP_EXACT_IN]`);
-    console.log(`  SwapInput (encoded): ${swapInputData.substring(0, 100)}...`);
-
-    // For non-BNB input, we need approval transaction first
+    // For token input, we need approval transaction first
     let approvalData = null;
     if (!isBNBInput) {
       const tokenIface = new ethers.Interface(ERC20_ABI);
-      // Approve UniversalRouter to spend the tokens
+      // Approve Router V2 to spend the tokens
       approvalData = tokenIface.encodeFunctionData("approve", [
-        UNIVERSAL_ROUTER_ADDRESS,
+        PANCAKESWAP_ROUTER_ADDRESS,
         amountInWei.toString(),
       ]);
-      console.log(`✓ Will request approval for ${UNIVERSAL_ROUTER_ADDRESS.substring(0, 14)}...`);
+      console.log(`✓ Will request approval for Router V2: ${PANCAKESWAP_ROUTER_ADDRESS.substring(0, 14)}...`);
     }
+
+    console.log(`✅ [PREPARE-SWAP] RETURNING SWAP TO ROUTER: ${PANCAKESWAP_ROUTER_ADDRESS}`);
 
     return NextResponse.json({
       swap: {
-        to: UNIVERSAL_ROUTER_ADDRESS,
+        to: PANCAKESWAP_ROUTER_ADDRESS,
         data: swapData,
         value: txValue,
       },
