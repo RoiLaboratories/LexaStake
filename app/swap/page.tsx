@@ -80,6 +80,131 @@ export default function SwapPage() {
     }
   }, [user, walletAddress]);
 
+  // Ensure correct network after login
+  useEffect(() => {
+    if (!authenticated || !walletAddress) return;
+
+    const ensureCorrectNetwork = async () => {
+      try {
+        if (!window.ethereum) {
+          console.warn("⚠️ window.ethereum not available");
+          return;
+        }
+
+        // Get current chain
+        const chainId = await window.ethereum.request({
+          method: "eth_chainId",
+        }) as string;
+
+        console.log(`🌐 [SWAP_PAGE] Current chain ID: ${chainId}`);
+
+        // BNB Chain is 0x38 (56 in decimal)
+        const BNB_CHAIN_HEX = "0x38";
+
+        if (chainId !== BNB_CHAIN_HEX) {
+          console.warn(
+            `⚠️ [SWAP_PAGE] Not on BNB Chain! Current: ${chainId}, Expected: ${BNB_CHAIN_HEX}`
+          );
+          console.log("🔄 [SWAP_PAGE] Forcing switch to BNB Chain...");
+
+          try {
+            // Try to switch
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: BNB_CHAIN_HEX }],
+            });
+
+            console.log("✓ [SWAP_PAGE] Successfully switched to BNB Chain");
+          } catch (switchError: any) {
+            // If chain not added, add it first
+            if (switchError.code === 4902) {
+              console.log(
+                "⚠️ [SWAP_PAGE] BNB Chain not found, attempting to add..."
+              );
+              try {
+                await window.ethereum.request({
+                  method: "wallet_addEthereumChain",
+                  params: [
+                    {
+                      chainId: BNB_CHAIN_HEX,
+                      chainName: "BNB Smart Chain",
+                      nativeCurrency: {
+                        name: "BNB",
+                        symbol: "BNB",
+                        decimals: 18,
+                      },
+                      rpcUrls: ["https://bsc-dataseed1.binance.org:443"],
+                      blockExplorerUrls: ["https://bscscan.com"],
+                    },
+                  ],
+                });
+
+                console.log("✓ [SWAP_PAGE] BNB Chain added, now switching...");
+
+                // Now switch
+                await window.ethereum.request({
+                  method: "wallet_switchEthereumChain",
+                  params: [{ chainId: BNB_CHAIN_HEX }],
+                });
+
+                console.log("✓ [SWAP_PAGE] Successfully switched after adding");
+              } catch (addError) {
+                console.error(
+                  "❌ [SWAP_PAGE] Failed to add/switch to BNB Chain:",
+                  addError
+                );
+              }
+            } else {
+              console.error("❌ [SWAP_PAGE] Failed to switch chain:", switchError);
+            }
+          }
+        } else {
+          console.log("✓ [SWAP_PAGE] Already on BNB Chain (0x38)");
+        }
+      } catch (error) {
+        console.error("❌ [SWAP_PAGE] Error checking/switching network:", error);
+      }
+    };
+
+    ensureCorrectNetwork();
+  }, [authenticated, walletAddress]);
+
+  // Set up wallet provider event listeners
+  useEffect(() => {
+    if (!window.ethereum) return;
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      console.warn("⚠️ [WALLET_EVENT] Accounts changed:", accounts);
+      if (accounts.length === 0) {
+        console.error("❌ [WALLET_EVENT] Wallet disconnected!");
+      }
+    };
+
+    const handleChainChanged = (chainId: string) => {
+      console.warn(`⚠️ [WALLET_EVENT] Chain changed to: ${chainId}`);
+      if (chainId !== "0x38") {
+        console.error(`❌ [WALLET_EVENT] NOT ON BNB CHAIN! Current: ${chainId}, Expected: 0x38`);
+      }
+    };
+
+    const handleDisconnect = (error: any) => {
+      console.error("❌ [WALLET_EVENT] Wallet disconnected:", error);
+    };
+
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+    window.ethereum.on("chainChanged", handleChainChanged);
+    window.ethereum.on("disconnect", handleDisconnect);
+
+    console.log("✓ [SWAP_PAGE] Wallet event listeners installed");
+
+    return () => {
+      window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      window.ethereum.removeListener("chainChanged", handleChainChanged);
+      window.ethereum.removeListener("disconnect", handleDisconnect);
+      console.log("✓ [SWAP_PAGE] Wallet event listeners removed");
+    };
+  }, []);
+
   // Fetch LEXA and BNB balances in one call when authenticated
   useEffect(() => {
     if (!authenticated || !walletAddress) return;
@@ -152,13 +277,71 @@ export default function SwapPage() {
   };
 
   const handleSwap = async () => {
-    console.log("🎯 [SWAP_PAGE] handleSwap clicked - starting swap process");
-    if (!walletAddress || transactionStatus === "loading") {
-      console.log("🎯 [SWAP_PAGE] handleSwap returning early:", { walletAddressDefined: !!walletAddress, transactionStatus });
+    console.log("🎯 [SWAP_PAGE] ========== SWAP INITIATED ==========");
+    console.log(`⏱️  [SWAP_PAGE] Timestamp: ${new Date().toISOString()}`);
+    console.log("🎯 [SWAP_PAGE] Current state:", { 
+      walletAddressDefined: !!walletAddress, 
+      walletAddress: walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "NOT SET",
+      transactionStatus, 
+      authenticated,
+      sellAmount,
+      sellToken: sellToken.symbol,
+      receiveToken: receiveToken.symbol,
+      slippage: slippage === "custom" ? customSlippage : slippage,
+    });
+
+    if (!walletAddress) {
+      console.error("❌ [SWAP_PAGE] Wallet address is not set!");
       return;
     }
-    console.log("🎯 [SWAP_PAGE] Calling executeSwap with:", { walletAddress });
-    await executeSwap(walletAddress);
+
+    if (transactionStatus === "loading") {
+      console.warn("⚠️ [SWAP_PAGE] Swap already in progress, ignoring duplicate request");
+      return;
+    }
+
+    console.log("✓ [SWAP_PAGE] Validation passed, calling executeSwap...");
+    
+    try {
+      // Check wallet connection status
+      if (!window.ethereum) {
+        console.error("❌ [SWAP_PAGE] window.ethereum is not available!");
+        throw new Error("Wallet not connected");
+      }
+
+      // Verify we can get accounts
+      const accounts = await window.ethereum.request?.({ method: "eth_accounts" }) as string[] | undefined;
+      console.log("🔐 [SWAP_PAGE] Connected accounts:", accounts);
+      
+      if (!accounts || accounts.length === 0) {
+        console.error("❌ [SWAP_PAGE] No accounts available!");
+        throw new Error("No wallet accounts available");
+      }
+
+      if (accounts[0].toLowerCase() !== walletAddress.toLowerCase()) {
+        console.warn("⚠️ [SWAP_PAGE] Account mismatch! Active:", accounts[0], "Expected:", walletAddress);
+      }
+
+      // Verify network before starting swap
+      const chainId = await window.ethereum.request?.({ method: "eth_chainId" }) as string | undefined;
+      console.log(`🌐 [SWAP_PAGE] Network verification: chainId=${chainId} (expected 0x38)`);
+      
+      if (chainId !== "0x38") {
+        console.error(`❌ [SWAP_PAGE] WRONG CHAIN! Current: ${chainId}, Expected: 0x38`);
+        throw new Error(`Wrong network. Current: ${chainId}, Expected: 0x38. Please switch to BNB Chain.`);
+      }
+
+      console.log("✓ [SWAP_PAGE] Pre-flight checks passed, executing swap...");
+      await executeSwap(walletAddress);
+      
+    } catch (preFlightError) {
+      const errMsg = preFlightError instanceof Error ? preFlightError.message : String(preFlightError);
+      console.error("❌ [SWAP_PAGE] Pre-flight check failed:", errMsg);
+      console.error("❌ [SWAP_PAGE] Full pre-flight error:", preFlightError);
+    }
+    
+    console.log("🎯 [SWAP_PAGE] ========== SWAP INITIATION COMPLETE ==========\n");
+
     console.log("🎯 [SWAP_PAGE] executeSwap completed");
   };
 
