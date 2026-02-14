@@ -113,6 +113,10 @@ export const useSwap = (): UseSwapReturn => {
       console.log(`⏱️  [SWAP] Timestamp: ${new Date().toISOString()}`);
       console.log("🚀 [SWAP] executeSwap called with:", { walletAddress, sellAmount, sellToken: sellToken.symbol, receiveToken: receiveToken.symbol });
       console.log("📦 [SWAP] Full token objects:", { sellToken, receiveToken });
+      console.log("⚙️  [SWAP] SLIPPAGE SETTINGS IN STATE:");
+      console.log("   slippage state var:", slippage);
+      console.log("   customSlippage state var:", customSlippage);
+      console.log("   Will use:", slippage === "custom" ? `CUSTOM ${customSlippage}%` : `PRESET ${slippage}%`);
       
       if (!sellAmount || parseFloat(sellAmount) === 0) {
         console.error("❌ [SWAP] VALIDATION FAILED: No sell amount provided");
@@ -212,21 +216,51 @@ export const useSwap = (): UseSwapReturn => {
         }
         console.log("✓ Token addresses are valid");
         
-        const prepareRes = await fetch("/api/pancakeswap/prepare-swap", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(preparePayload),
-        });
-
-        console.log("📬 Prepare response status:", prepareRes.status);
-
-        if (!prepareRes.ok) {
-          const errorData = await prepareRes.json();
-          console.error("❌ [SWAP] API RESPONSE ERROR:", errorData);
-          throw new Error(errorData.error || "Failed to prepare swap");
+        console.log("\n🌐 [API CALL] Sending prepare-swap request...");
+        console.log("📤 Full payload being sent:", JSON.stringify(preparePayload, null, 2));
+        
+        let prepareRes;
+        try {
+          prepareRes = await fetch("/api/pancakeswap/prepare-swap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(preparePayload),
+          });
+        } catch (fetchError) {
+          console.error("❌ [SWAP] FETCH ERROR - Network/Connection issue:", fetchError);
+          setErrorMessage(`Network error: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+          setTransactionStatus("error");
+          return;
         }
 
-        const preparedSwap = await prepareRes.json();
+        console.log("📬 Prepare response received - Status:", prepareRes.status, prepareRes.statusText);
+
+        if (!prepareRes.ok) {
+          let errorData;
+          try {
+            errorData = await prepareRes.json();
+          } catch (parseError) {
+            console.error("❌ [SWAP] Could not parse error response as JSON");
+            setErrorMessage(`API error: ${prepareRes.statusText}`);
+            setTransactionStatus("error");
+            return;
+          }
+          console.error("❌ [SWAP] API RESPONSE ERROR:", errorData);
+          setErrorMessage(errorData.error || "Failed to prepare swap - check console for details");
+          setTransactionStatus("error");
+          return;
+        }
+
+        let preparedSwap;
+        try {
+          preparedSwap = await prepareRes.json();
+        } catch (parseError) {
+          console.error("❌ [SWAP] ERROR parsing successful response:", parseError);
+          setErrorMessage("Failed to parse swap preparation response");
+          setTransactionStatus("error");
+          return;
+        }
+        
         console.log("✓ [SWAP] Swap prepared successfully:", {
           hasApproval: !!preparedSwap.approval,
           hasSwap: !!preparedSwap.swap,
@@ -234,6 +268,19 @@ export const useSwap = (): UseSwapReturn => {
           swapDataLength: preparedSwap.swap?.data?.length,
           details: preparedSwap.details,
         });
+        
+        // 🔍 VERIFY SLIPPAGE IS BEING APPLIED
+        console.log("\n🎯 [SLIPPAGE VERIFICATION]");
+        console.log(`   Requested slippage: ${effectiveSlippage}%`);
+        console.log(`   Expected output: ${preparedSwap.details?.amountOut} ${receiveToken.symbol}`);
+        console.log(`   Minimum output (after slippage): ${preparedSwap.details?.minimumAmountOut} ${receiveToken.symbol}`);
+        const expectedNum = parseFloat(preparedSwap.details?.amountOut || "0");
+        const minimumNum = parseFloat(preparedSwap.details?.minimumAmountOut || "0");
+        const actualSlippageApplied = ((expectedNum - minimumNum) / expectedNum * 100).toFixed(2);
+        console.log(`   Actual slippage applied: ${actualSlippageApplied}%`);
+        if (Math.abs(parseFloat(actualSlippageApplied) - parseFloat(effectiveSlippage)) > 0.5) {
+          console.warn(`⚠️  WARNING: Applied slippage (${actualSlippageApplied}%) doesn't match requested (${effectiveSlippage}%)`);
+        }
         
         // Detect swap type and log important details
         const WBNB_ADDRESS = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
@@ -441,76 +488,7 @@ export const useSwap = (): UseSwapReturn => {
           console.warn("⚠️ Pre-flight check warning:", preflight);
         }
 
-        // ========== STEP 5: EXECUTE WRAP (IF NEEDED FOR NATIVE BNB) ==========
-        if (preparedSwap.wrap) {
-          console.log("=".repeat(50));
-          console.log("STEP 5: Wrapping native BNB → WBNB...");
-          console.log("=".repeat(50));
-          console.log("📝 Wrap TX Details:");
-          console.log("  To (WBNB):", preparedSwap.wrap.to);
-          console.log("  Value (native BNB):", ethers.formatEther(preparedSwap.wrap.value), "BNB");
-          console.log("  Function: WBNB.deposit()");
-          
-          try {
-            console.log("🔐 Sending wrap transaction - PLEASE CONFIRM IN YOUR WALLET");
-            console.log("⏲️  Awaiting wallet response...");
-            
-            let wrapTxResponse;
-            try {
-              wrapTxResponse = await signer.sendTransaction({
-                to: ethers.getAddress(preparedSwap.wrap.to.toLowerCase()),
-                data: preparedSwap.wrap.data,
-                value: preparedSwap.wrap.value,
-                gasLimit: "100000",
-              });
-            } catch (sendError: any) {
-              console.error("❌ [SWAP] Wallet rejection on wrap:");
-              errorLogger.logError(sendError, {
-                component: "SWAP_WRAP",
-                action: "sendTransaction",
-                walletAddress,
-                chainId: "0x38",
-                timestamp: new Date().toISOString(),
-              });
-              
-              if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
-                setErrorMessage("You rejected the wrap transaction");
-              } else {
-                setErrorMessage(`Wrap failed: ${sendError?.message || String(sendError)}`);
-              }
-              
-              setTransactionStatus("error");
-              return;
-            }
-            
-            console.log("✓ Wrap sent, TX hash:", wrapTxResponse.hash);
-            console.log("⏳ Waiting for wrap confirmation...");
-            
-            try {
-              const wrapReceipt = await wrapTxResponse.wait(1);
-              
-              if (!wrapReceipt || wrapReceipt.status === 0) {
-                throw new Error("Wrap transaction failed on-chain");
-              }
-
-              console.log("✓✓✓ Wrap confirmed! Native BNB successfully wrapped to WBNB");
-              console.log("    Hash:", wrapReceipt.hash);
-            } catch (waitError) {
-              console.error("❌ Wrap wait error:", waitError);
-              setErrorMessage("Wrap transaction failed");
-              setTransactionStatus("error");
-              return;
-            }
-          } catch (wrapError) {
-            const errorMsg = wrapError instanceof Error ? wrapError.message : String(wrapError);
-            console.error("❌ Wrap error:", errorMsg);
-            setErrorMessage(`Wrap failed: ${errorMsg}`);
-            setTransactionStatus("error");
-            return;
-          }
-        }
-
-        // ========== STEP 6: EXECUTE APPROVAL (IF NEEDED) ==========
+        // ========== STEP 5: EXECUTE APPROVAL (IF NEEDED) ==========
         if (preparedSwap.approval) {
           console.log("=".repeat(50));
           console.log("STEP 5: Requesting token approval...");
@@ -598,84 +576,12 @@ export const useSwap = (): UseSwapReturn => {
             return;
           }
         } else {
-          console.log("✓ No approval needed (BNB or already approved)");
+          console.log("✓ No approval needed (BNB input or already approved)");
         }
 
-        // ========== STEP 7: APPROVE WBNB SPENDING (IF NEEDED AFTER WRAP) ==========
-        if (preparedSwap.wrapApproval) {
-          console.log("=".repeat(50));
-          console.log("STEP 7: Approving WBNB spending by router...");
-          console.log("=".repeat(50));
-          console.log("📝 WBNB Approval TX Details:");
-          console.log("  To (WBNB):", preparedSwap.wrapApproval.to);
-          console.log("  Function: WBNB.approve(router, amount)");
-          console.log("  Data:", preparedSwap.wrapApproval.data.substring(0, 50) + "...");
-          
-          try {
-            console.log("🔐 Sending approval - PLEASE CONFIRM IN YOUR WALLET");
-            console.log("⏲️  Awaiting wallet response...");
-            
-            let approvalTxResponse;
-            try {
-              approvalTxResponse = await signer.sendTransaction({
-                to: ethers.getAddress(preparedSwap.wrapApproval.to.toLowerCase()),
-                data: preparedSwap.wrapApproval.data,
-                value: preparedSwap.wrapApproval.value,
-                gasLimit: "100000",
-              });
-            } catch (sendError: any) {
-              console.error("❌ [SWAP] Wallet rejection or signing error on WBNB approval:");
-              errorLogger.logError(sendError, {
-                component: "SWAP_WRAP_APPROVAL",
-                action: "sendTransaction",
-                walletAddress,
-                chainId: "0x38",
-                timestamp: new Date().toISOString(),
-              });
-              
-              if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
-                setErrorMessage("You rejected the WBNB approval");
-              } else {
-                setErrorMessage(`WBNB approval failed: ${sendError?.message || String(sendError)}`);
-              }
-              
-              setTransactionStatus("error");
-              return;
-            }
-            
-            console.log("✓ Approval sent, TX hash:", approvalTxResponse.hash);
-            console.log("⏳ Waiting for approval confirmation...");
-            
-            try {
-              const approvalReceipt = await approvalTxResponse.wait(1);
-              
-              if (!approvalReceipt) {
-                throw new Error("No approval receipt received after waiting");
-              }
-
-              console.log("✓ WBNB approval confirmed! Hash:", approvalReceipt.hash);
-              
-              if (approvalReceipt.status === 0) {
-                throw new Error("WBNB approval transaction failed on-chain");
-              }
-            } catch (waitError) {
-              console.error("❌ [SWAP] Error waiting for approval receipt:", waitError);
-              throw waitError;
-            }
-          } catch (approvalError) {
-            const errorMsg = approvalError instanceof Error ? approvalError.message : String(approvalError);
-            console.error("❌ WBNB approval error:", errorMsg);
-            
-            setErrorMessage(`WBNB approval failed: ${errorMsg}`);
-            setTransactionStatus("error");
-            return;
-          }
-        }
-
-        // ========== STEP 8: EXECUTE SWAP ==========
+        // ========== STEP 6: EXECUTE SWAP ==========
         console.log("=".repeat(50));
-        const stepNum = preparedSwap.wrap ? (preparedSwap.wrapApproval ? "8" : "7") : "6";
-        console.log(`STEP ${stepNum}: Executing swap transaction...`);
+        console.log("STEP 6: Executing swap transaction...");
         console.log("=".repeat(50));
         console.log("📝 Swap TX Details:");
         console.log("  To (Router):", preparedSwap.swap.to);

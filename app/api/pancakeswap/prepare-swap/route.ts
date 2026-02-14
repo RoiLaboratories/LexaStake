@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 
-const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const PANCAKESWAP_ROUTER_V2_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";  // For quote fetching only
+const PANCAKESWAP_UNIVERSAL_ROUTER_ADDRESS = "0xd9C500DfF816a1Da21A48A732d3498Bf09dc9AEB";  // For swap execution
 const WBNB_ADDRESS = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
 
 const BSC_RPC_URLS = (() => {
@@ -76,20 +77,41 @@ function makeBscRunner(provider: ethers.Provider): ethers.ContractRunner {
   };
 }
 
-// Minimal ABIs for Router V2
+/** Build swap path - can route through WBNB if needed */
+function buildSwapPath(tokenIn: string, tokenOut: string): string[] {
+  const in_ = tokenIn.toLowerCase();
+  const out = tokenOut.toLowerCase();
+  const wbnb = WBNB_ADDRESS.toLowerCase();
+
+  // Direct path if one of them is WBNB
+  if (in_ === wbnb || out === wbnb) {
+    return [tokenIn, tokenOut];
+  }
+
+  // Route through WBNB
+  return [tokenIn, WBNB_ADDRESS, tokenOut];
+}
+
 const ROUTER_ABI = [
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
-  "function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[] amounts)",
-  "function swapExactBNBForTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) payable returns (uint256[] amounts)",
-  "function swapExactTokensForBNB(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[] amounts)",
+  "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] amounts)",
+  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] amounts)",
+  "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] amounts)",
 ];
+
+// Universal Router ABI - no longer used, reverting to Router V2
+// const UNIVERSAL_ROUTER_ABI = [
+//   "function execute(bytes commands, bytes[] inputs) payable",
+//   "function execute(bytes commands, bytes[] inputs, uint256 deadline) payable",
+// ];
+
+// Command codes for Universal Router - no longer used
+// const COMMAND_CODES = {
+//   WRAP_ETH: 0x0b,
+//   SWAP_WITH_EXACT_INPUT: 0x08,
+// };
 
 const ERC20_ABI = [
-  "function approve(address _spender, uint256 _value) returns (bool)",
-];
-
-const WBNB_ABI = [
-  "function deposit() payable",
   "function approve(address _spender, uint256 _value) returns (bool)",
 ];
 
@@ -117,6 +139,7 @@ export async function POST(request: NextRequest) {
       amountIn,
       slippage,
       slippageType: typeof slippage,
+      slippageAsNumber: parseFloat(slippage as string),
       walletAddress: walletAddress?.substring(0, 14) + "...",
       fromNativeBNB,
     });
@@ -191,7 +214,7 @@ export async function POST(request: NextRequest) {
         
         const rpcProvider = new ethers.JsonRpcProvider(rpcUrl, BSC_NETWORK, { staticNetwork: true });
         const rpcRouter = new ethers.Contract(
-          PANCAKESWAP_ROUTER_ADDRESS,
+          PANCAKESWAP_ROUTER_V2_ADDRESS,
           ROUTER_ABI,
           makeBscRunner(rpcProvider),
         );
@@ -248,6 +271,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate minimum amount with slippage
+    // 6% slippage accounts for LEXA's 5% transfer tax + transaction volatility
     const slippagePercentage = parseFloat(slippage as string) || 0.5;
     console.log(`📊 Slippage calculation:`, {
       slippageInput: slippage,
@@ -256,177 +280,132 @@ export async function POST(request: NextRequest) {
       amountOutEther: ethers.formatEther(amountOutWei),
       calculation: `${amountOutWei.toString()} * (10000 - ${Math.round(slippagePercentage * 100)}) / 10000`,
     });
+    
+    // Apply slippage to expected output
+    // Slippage naturally accounts for price volatility, token transfer tax, and fees
     const minimumAmountOutWei = (amountOutWei * BigInt(10000 - Math.round(slippagePercentage * 100))) / BigInt(10000);
+    
     const minimumAmountOutEther = ethers.formatEther(minimumAmountOutWei);
+    
+    // ✅ VERIFICATION: Log actual slippage applied
+    const expectedAmount = parseFloat(ethers.formatEther(amountOutWei));
+    const minimumAmount = parseFloat(minimumAmountOutEther);
+    const totalReduction = ((expectedAmount - minimumAmount) / expectedAmount * 100).toFixed(3);
+    console.log(`\n✅ SLIPPAGE VERIFICATION:`);
     console.log(`  Expected Output: ${ethers.formatEther(amountOutWei)} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
-    console.log(`  Minimum Output (after slippage ${slippagePercentage}%): ${minimumAmountOutEther} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
-    console.log(`  Slippage adjustment: ${(parseFloat(ethers.formatEther(amountOutWei)) - parseFloat(minimumAmountOutEther)).toFixed(6)} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
+    console.log(`  Minimum Output (after ${slippagePercentage}% slippage): ${minimumAmountOutEther} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
+    console.log(`  Reduction: ${(expectedAmount - minimumAmount).toFixed(6)} tokens (~${totalReduction}%)`);
 
     // Warn if minimum output is suspiciously low
     const amountOutNum = parseFloat(ethers.formatEther(amountOutWei));
     const minimumOutNum = parseFloat(minimumAmountOutEther);
     if (amountOutNum < 1 && normalizedTokenOut !== WBNB_ADDRESS.toLowerCase()) {
       console.warn(`⚠️  WARNING: Very low token output (${amountOutNum.toFixed(2)} tokens)`);
-      console.warn(`    This suggests: small input, low liquidity, or high token tax`);
+      console.warn(`    This suggests: small input, low liquidity, or token transfer tax`);
     }
 
     // Set deadline to 2 hours from now (very generous for testing)
     const deadline = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
     console.log(`⏰ Deadline set to: ${deadline} (${new Date(deadline * 1000).toISOString()})`);
 
-    // ✅ Use PancakeSwap Router V2 for simple, direct swaps
+    // ✅ Use PancakeSwap Router V2 for swap execution
     console.log(`🔄 Using Router V2 for swap execution`);
+    console.log(`   Router V2 Address: ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
     
-    const routerIface = new ethers.Interface(ROUTER_ABI);
-
     let swapData: string;
     let txValue = "0";
 
-    // Determine which swap function to use based on input/output tokens
-    // ⭐ CRITICAL: Check if input is native BNB (not WBNB token)
-    // When user selects "BNB", we use native BNB → requires swapExactBNBForTokens
-    // When user selects "WBNB" token, we use token → requires approval + swapExactTokensFor...
-    const isBNBInput = fromNativeBNB === true;  // Explicitly use native BNB if flag is set
-    const isBNBOutput = normalizedTokenOut.toLowerCase() === WBNB_ADDRESS.toLowerCase();
+    const isBNBInput = fromNativeBNB === true;
 
-    console.log(`🔄 Swap direction:`, {
-      isBNBInput,
-      isBNBOutput,
-      inputToken: normalizedTokenIn,
-      outputToken: normalizedTokenOut,
-      wbnbAddress: WBNB_ADDRESS.toLowerCase(),
-      fromNativeBNB,
-    });
-
-    // Build the correct path for the swap
-    let swapPath: string[];
+    // Build the swap path (always starts with WBNB for this swap)
+    const swapPath = [ethers.getAddress(WBNB_ADDRESS.toLowerCase()), ethers.getAddress(normalizedTokenOut.toLowerCase())];
+    
+    console.log(`\n💰 ROUTER V2 SWAP PREPARATION:`);
+    console.log(`   Input: ${isBNBInput ? "Native BNB" : "Token"}`);
+    console.log(`   Output: LEXA (${normalizedTokenOut.substring(0, 14)}...)`);
+    console.log(`   Path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
+    
+    // Create Router V2 interface
+    const routerIface = new ethers.Interface(ROUTER_ABI);
+    
     if (isBNBInput) {
-      // Native BNB input: path must start with WBNB (router will wrap BNB → WBNB internally)
-      console.log(`\n💰 NATIVE BNB INPUT PATH:`);
-      console.log(`   User sends: Native BNB`);
-      console.log(`   Router wraps: BNB → WBNB (internally via deposit)`);
-      console.log(`   Path: [WBNB, ${normalizedTokenOut.substring(0, 14)}...]`);
-      swapPath = [ethers.getAddress(WBNB_ADDRESS.toLowerCase()), ethers.getAddress(normalizedTokenOut.toLowerCase())];
-    } else if (isBNBOutput) {
-      // Token to BNB output: direct path
-      console.log(`\n🏦 BNB OUTPUT PATH:`);
-      console.log(`   Path: [${normalizedTokenIn.substring(0, 14)}..., WBNB]`);
-      swapPath = buildSwapPath(normalizedTokenIn, normalizedTokenOut);
-    } else {
-      // Token to token: may route through WBNB
-      console.log(`\n🔀 TOKEN TO TOKEN PATH:`);
-      swapPath = buildSwapPath(normalizedTokenIn, normalizedTokenOut);
-      console.log(`   Path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
-    }
-
-    if (isBNBInput) {
-      // BNB to token: Two-step approach for better compatibility
-      // Step 1: Wrap native BNB → WBNB via deposit()
-      // Step 2: Swap WBNB → LEXA via router
+      // Use swapExactETHForTokens for native BNB input
+      console.log(`\n📝 FUNCTION: swapExactETHForTokens`);
+      console.log(`   Parameters:`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} (${minimumAmountOutWei.toString()} wei)`);
+      console.log(`     - path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
+      console.log(`     - to: ${normalizedWalletAddress}`);
+      console.log(`     - deadline: ${deadline}`);
       
-      console.log(`\n✅ TWO-STEP SWAP (native BNB): Wrap then Swap`);
-      console.log(`   Step 1: WBNB.deposit() - Convert native BNB → WBNB tokens`);
-      console.log(`   Step 2: Router.swapExactTokensForTokens(WBNB → LEXA)`);
-      console.log(`   User sends: ${ethers.formatEther(amountInWei)} BNB as value in Step 1`);
-      
-      // DIAGNOSTIC: Ensure path elements are properly formatted
-      console.log(`\n🔍 PATH VALIDATION BEFORE ENCODING:`);
-      console.log(`   Path[0] (WBNB): ${swapPath[0]}`);
-      console.log(`   Path[1] (Output): ${swapPath[1]}`);
-      console.log(`   Path length: ${swapPath.length}`);
-      
-      // Create WBNB deposit call (wraps BNB → WBNB)
-      const wbnbIface = new ethers.Interface(WBNB_ABI);
-      const wrapData = wbnbIface.encodeFunctionData("deposit", []);
-      
-      console.log(`✓ WBNB.deposit() encoded successfully`);
-      console.log(`  Data length: ${wrapData.length} chars`);
-      
-      // Create token-to-token swap call (WBNB → LEXA)
-      swapData = routerIface.encodeFunctionData("swapExactTokensForTokens", [
-        amountInWei.toString(),  // We'll have exactly this amount of WBNB after wrapping
-        minimumAmountOutWei.toString(),
+      swapData = routerIface.encodeFunctionData("swapExactETHForTokens", [
+        minimumAmountOutWei,
         swapPath,
         normalizedWalletAddress,
         deadline,
       ]);
       
-      console.log(`✓ Router.swapExactTokensForTokens() encoded successfully`);
-      console.log(`  Encoded data length: ${swapData.length} chars`);
+      console.log(`\n✓ Router V2 swapExactETHForTokens() encoded successfully`);
       console.log(`  Function selector: ${swapData.substring(0, 10)}`);
+      console.log(`  Encoded data length: ${swapData.length} chars`);
+      console.log(`  💾 TRANSACTION DETAILS:`);
+      console.log(`     - to: Router V2 ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
+      console.log(`     - value: ${ethers.formatEther(amountInWei)} BNB (${amountInWei.toString()} wei)`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} LEXA`);
+      console.log(`     - deadline: ${deadline}`);
       
-      // Return both transactions: wrap first, then swap
-      // We need to modify the response to include both transactions
       txValue = amountInWei.toString();
-      
-      // Store the wrap transaction for returning alongside the swap
-      const wrapTx = {
-        to: WBNB_ADDRESS,  // Send to WBNB contract
-        data: wrapData,
-        value: txValue,   // Send native BNB here
-      };
-      
-      // For now, we'll encode both in the swap response
-      // The frontend will need to execute wrap first, then swap
-      console.log(`\n📝 TRANSACTION SEQUENCE:`);
-      console.log(`   1st TX: WBNB.deposit() to ${WBNB_ADDRESS}`);
-      console.log(`      Value: ${ethers.formatEther(txValue)} BNB`);
-      console.log(`   2nd TX: Router.swapExactTokensForTokens() to ${PANCAKESWAP_ROUTER_ADDRESS}`);
-      console.log(`      Value: 0 (no native BNB needed, using WBNB tokens from wrap)`);
-    } else if (isBNBOutput) {
-      // Token to BNB: call swapExactTokensForBNB
-      console.log(`\n✅ Using swapExactTokensForBNB`);
-      console.log(`   This swaps token back to native BNB`);
-      swapData = routerIface.encodeFunctionData("swapExactTokensForBNB", [
-        amountInWei.toString(),
-        minimumAmountOutWei.toString(),
-        swapPath,
-        normalizedWalletAddress,
-        deadline,
-      ]);
     } else {
-      // Token to token: call swapExactTokensForTokens
-      console.log(`\n✅ Using swapExactTokensForTokens`);
-      console.log(`   This swaps between two tokens`);
+      // Use swapExactTokensForTokens for token input
+      console.log(`\n📝 FUNCTION: swapExactTokensForTokens`);
+      console.log(`   Parameters:`);
+      console.log(`     - amountIn: ${ethers.formatEther(amountInWei)} (${amountInWei.toString()} wei)`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} (${minimumAmountOutWei.toString()} wei)`);
+      console.log(`     - path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
+      console.log(`     - to: ${normalizedWalletAddress}`);
+      console.log(`     - deadline: ${deadline}`);
+      
       swapData = routerIface.encodeFunctionData("swapExactTokensForTokens", [
-        amountInWei.toString(),
-        minimumAmountOutWei.toString(),
+        amountInWei,
+        minimumAmountOutWei,
         swapPath,
         normalizedWalletAddress,
         deadline,
       ]);
+      
+      console.log(`\n✓ Router V2 swapExactTokensForTokens() encoded successfully`);
+      console.log(`  Function selector: ${swapData.substring(0, 10)}`);
+      console.log(`  Encoded data length: ${swapData.length} chars`);
+      console.log(`  💾 TRANSACTION DETAILS:`);
+      console.log(`     - to: Router V2 ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
+      console.log(`     - amountIn: ${ethers.formatEther(amountInWei)} tokens`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} LEXA`);
+      console.log(`     - deadline: ${deadline}`);
     }
 
-    console.log(`✓ Encoded Router V2 swap call`);
-    console.log(`  Function: ${isBNBInput ? "swapExactTokensForTokens (after wrap)" : isBNBOutput ? "swapExactTokensForBNB" : "swapExactTokensForTokens"}`);
-    console.log(`  Input amount: ${ethers.formatEther(amountInWei)} ${isBNBInput ? "WBNB (from wrap)" : "tokens"}`);
-    console.log(`  Minimum output: ${ethers.formatEther(minimumAmountOutWei)}`);
-    console.log(`  Path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" -> ")}]`);
-    console.log(`  Recipient: ${normalizedWalletAddress.substring(0, 14)}...`);
-    console.log(`  Deadline: ${deadline}`);
-    console.log(`  Value to send: ${isBNBInput ? ethers.formatEther(txValue) + " BNB (for wrap)" : "0"}`);
-
-    // For token input, we need approval transaction first
+    // For token input, we need approval for Router V2
     let approvalData = null;
     if (!isBNBInput) {
       const tokenIface = new ethers.Interface(ERC20_ABI);
       // Approve Router V2 to spend the tokens
       approvalData = tokenIface.encodeFunctionData("approve", [
-        PANCAKESWAP_ROUTER_ADDRESS,
+        PANCAKESWAP_ROUTER_V2_ADDRESS,
         amountInWei.toString(),
       ]);
-      console.log(`✓ Will request approval for Router V2: ${PANCAKESWAP_ROUTER_ADDRESS.substring(0, 14)}...`);
+      console.log(`\n✓ Will request approval for Router V2: ${PANCAKESWAP_ROUTER_V2_ADDRESS.substring(0, 14)}...`);
     }
 
-    console.log(`✅ [PREPARE-SWAP] RETURNING SWAP TO ROUTER: ${PANCAKESWAP_ROUTER_ADDRESS}`);
+    console.log(`\n✅ [PREPARE-SWAP] FINAL RESPONSE (ROUTER V2)`);
+    console.log(`   Router: ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
+    console.log(`   Function: ${isBNBInput ? "swapExactETHForTokens" : "swapExactTokensForTokens"}`);
+    console.log(`   Swap data length: ${swapData.length} chars`);
+    console.log(`   Transaction value: ${isBNBInput ? ethers.formatEther(txValue) + " BNB" : "0"}`);
 
-    // Build response
-    // For native BNB input, we need to return wrap, approval, and swap transactions
-    let response: any = {
+    // Build response using Router V2
+    const response: any = {
       swap: {
-        to: PANCAKESWAP_ROUTER_ADDRESS,
+        to: PANCAKESWAP_ROUTER_V2_ADDRESS,
         data: swapData,
-        value: isBNBInput ? "0" : txValue,  // Only for non-BNB input (swap value), wrap value handled separately
+        value: isBNBInput ? txValue : "0",  // Only for BNB input
       },
       approval: approvalData ? {
         to: normalizedTokenIn,
@@ -439,38 +418,17 @@ export async function POST(request: NextRequest) {
         path: swapPath,
         deadline,
         isBNBInput,
+        slippage: slippagePercentage,
       },
     };
 
-    // If input is native BNB, add the wrap transaction and WBNB approval
-    if (isBNBInput) {
-      const wbnbIface = new ethers.Interface(WBNB_ABI);
-      const wrapData = wbnbIface.encodeFunctionData("deposit", []);
-      
-      // Create approval for router to spend WBNB tokens after wrapping
-      const wbnbApprovalIface = new ethers.Interface(ERC20_ABI);
-      const wbnbApprovalData = wbnbApprovalIface.encodeFunctionData("approve", [
-        PANCAKESWAP_ROUTER_ADDRESS,
-        amountInWei.toString(),
-      ]);
-      
-      response.wrap = {
-        to: WBNB_ADDRESS,
-        data: wrapData,
-        value: txValue,  // Native BNB amount to wrap
-      };
-      
-      response.wrapApproval = {
-        to: WBNB_ADDRESS,
-        data: wbnbApprovalData,
-        value: "0",  // No native value needed for approval
-      };
-      
-      response.details.transactionSequence = [
-        "1. Send native BNB to WBNB.deposit() to wrap it into WBNB tokens",
-        "2. Approve router to spend your WBNB tokens via WBNB.approve(router, amount)",
-        "3. Send WBNB tokens to Router via swapExactTokensForTokens() to swap to LEXA"
-      ];
+    console.log(`\n📤 RESPONSE SUMMARY:`);
+    console.log(`   Router used: Universal Router`);
+    console.log(`   Has approval: ${!!response.approval}`);
+    console.log(`   Input type: ${isBNBInput ? "Native BNB" : "Token"}`);
+    if (response.approval) {
+      console.log(`   Approval required: YES`);
+      console.log(`   Approval target (token): ${normalizedTokenIn.substring(0, 14)}...`);
     }
 
     return NextResponse.json(response);
@@ -481,18 +439,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-function buildSwapPath(tokenIn: string, tokenOut: string): string[] {
-  const WBNB = WBNB_ADDRESS.toLowerCase();
-  const normalizedIn = tokenIn.toLowerCase();
-  const normalizedOut = tokenOut.toLowerCase();
-
-  // Direct swap if one is WBNB
-  if (normalizedIn === WBNB || normalizedOut === WBNB) {
-    return [ethers.getAddress(tokenIn.toLowerCase()), ethers.getAddress(tokenOut.toLowerCase())];
-  }
-
-  // Route through WBNB for other pairs
-  return [ethers.getAddress(tokenIn.toLowerCase()), ethers.getAddress(WBNB_ADDRESS.toLowerCase()), ethers.getAddress(tokenOut.toLowerCase())];
 }

@@ -35,6 +35,29 @@ export default function SwapPage() {
 
   useEffect(() => {
     console.log("📄 [SWAP_PAGE] Component mounted - console is working!");
+    console.warn("⚠️ [SWAP_PAGE] If you see this message, the page loaded correctly");
+    
+    // Add global error listener as fallback
+    const handleError = (event: ErrorEvent) => {
+      console.error("❌ [GLOBAL] Unhandled error:", event.error);
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      console.error("❌ [GLOBAL] Unhandled promise rejection:", event.reason);
+    };
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+    
+    // Expose test function to window for manual testing
+    (window as any).testSwapConsole = () => {
+      console.log("🧪 [TEST] CONSOLE TEST - You clicked the test function!");
+      console.warn("✓ Console is working and can receive your input");
+    };
+    console.log("🧪 [TEST] Type this in console to test: testSwapConsole()");
+    
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+    };
   }, []);
 
   const {
@@ -277,6 +300,7 @@ export default function SwapPage() {
   };
 
   const handleSwap = async () => {
+    console.warn("🚨 [SWAP_PAGE] BUTTON CLICKED - handleSwap function started executing!");
     console.log("🎯 [SWAP_PAGE] ========== SWAP INITIATED ==========");
     console.log(`⏱️  [SWAP_PAGE] Timestamp: ${new Date().toISOString()}`);
     console.log("🎯 [SWAP_PAGE] Current state:", { 
@@ -366,6 +390,36 @@ export default function SwapPage() {
         showConnectButton={true}
         activeTab="Swap"
       />
+
+      {/* DEBUG PANEL - Remove after debugging
+      <div style={{
+        position: "fixed",
+        top: "100px",
+        right: "10px",
+        zIndex: 9999,
+        background: "#1a1a1a",
+        color: "#00ff00",
+        padding: "12px",
+        borderRadius: "4px",
+        fontSize: "11px",
+        fontFamily: "monospace",
+        maxWidth: "300px",
+        border: "2px solid #00ff00",
+        maxHeight: "200px",
+        overflow: "auto"
+      }}>
+        <div>🔧 DEBUG INFO</div>
+        <div>Slippage: {slippage === "custom" ? customSlippage : slippage}%</div>
+        <div>Status: {transactionStatus}</div>
+        <div>Sell: {sellAmount || "0"} {sellToken.symbol}</div>
+        <div>⏱️ {new Date().toLocaleTimeString()}</div>
+        <button 
+          onClick={() => console.log("DEBUG: StateCheck", {slippage, customSlippage, transactionStatus})}
+          style={{marginTop: "8px", padding: "4px 8px", cursor: "pointer", background: "#00ff00", color: "#000"}}
+        >
+          Log State
+        </button>
+      </div> */}
 
       {/* Transaction Notifications */}
       <TransactionNotification
@@ -491,7 +545,10 @@ export default function SwapPage() {
                 </button>
               ) : (
                 <button
-                  onClick={handleSwap}
+                  onClick={() => {
+                    console.warn("🚨🚨🚨 SWAP BUTTON CLICKED - INLINE HANDLER 🚨🚨🚨");
+                    handleSwap();
+                  }}
                   disabled={isSwapDisabled}
                   className={`w-full sm:w-3/4 px-6 py-3 sm:py-4 rounded-2xl font-bold text-base sm:text-lg transition-all duration-300 ${
                     !isSwapDisabled
