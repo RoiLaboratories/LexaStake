@@ -73,6 +73,7 @@ export default function SwapPage() {
     isLoadingQuote,
     prices,
     errorMessage,
+    transactionHash,
     setSellAmount,
     setReceiveAmount,
     setSlippage,
@@ -429,6 +430,7 @@ export default function SwapPage() {
         sellToken={sellToken.symbol}
         receiveAmount={receiveAmount}
         receiveToken={receiveToken.symbol}
+        transactionHash={transactionHash || undefined}
         onClose={closeNotification}
         errorMessage={errorMessage}
       />

@@ -10,6 +10,7 @@ interface TransactionNotificationProps {
   sellToken?: string;
   receiveAmount?: string;
   receiveToken?: string;
+  transactionHash?: string;
   onClose: () => void;
   errorMessage?: string | null;
 }
@@ -21,6 +22,7 @@ export default function TransactionNotification({
   sellToken,
   receiveAmount,
   receiveToken,
+  transactionHash,
   onClose,
   errorMessage,
 }: TransactionNotificationProps) {
@@ -131,14 +133,20 @@ export default function TransactionNotification({
                     Token swapped successfully!
                   </h3>
                 </div>
-                <p className="text-gray-400 text-sm mb-2 leading-relaxed">
-                  Swapped{" "}
-                  {sellAmount && parseFloat(sellAmount).toLocaleString()}{" "}
-                  {sellToken}
-                </p>
-                <p className="text-gray-400 text-sm mb-3 leading-relaxed">
-                  for {receiveAmount || "0.1"} {receiveToken}
-                </p>
+                <div className="bg-gray-800 rounded-lg p-3 mb-4 border border-gray-700">
+                  <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-1">
+                    You Sent
+                  </p>
+                  <p className="text-white text-sm font-semibold mb-3">
+                    {sellAmount ? parseFloat(sellAmount).toLocaleString('en-US', { maximumFractionDigits: 8 }) : "0"} {sellToken}
+                  </p>
+                  <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-1">
+                    You Received
+                  </p>
+                  <p className="text-white text-sm font-semibold">
+                    {receiveAmount ? parseFloat(receiveAmount).toLocaleString('en-US', { maximumFractionDigits: 8 }) : "0"} {receiveToken}
+                  </p>
+                </div>
                 <div className="flex items-center gap-2 mb-4 text-gray-400 text-sm">
                   <Image
                     src="/assets/LexaLogo2.svg"
@@ -149,9 +157,14 @@ export default function TransactionNotification({
                   />
                   <span>Via LexaSwap</span>
                 </div>
-                <button className="w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors">
+                <a
+                  href={`https://bscscan.com/tx/${transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors text-center"
+                >
                   View transaction
-                </button>
+                </a>
               </div>
             )}
           </motion.div>

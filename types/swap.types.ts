@@ -51,6 +51,7 @@ export type UseSwapReturn = {
   isLoadingQuote: boolean;
   prices: { bnb: number; lexa: number };
   errorMessage: string | null;
+  transactionHash: string | null;
   
   // Setters
   setSellToken: (token: Token) => void;

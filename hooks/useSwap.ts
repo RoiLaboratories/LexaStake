@@ -26,6 +26,7 @@ export const useSwap = (): UseSwapReturn => {
     lexa: 0,
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
 
   // Fetch quote when amounts or tokens change
   useEffect(() => {
@@ -1032,6 +1033,7 @@ export const useSwap = (): UseSwapReturn => {
           
           console.log("✓✓ SWAP SUCCESSFUL! TX Hash:", swapReceipt.hash);
           console.log(`⏱️  [SWAP] Total execution time: ${Date.now() - executionStartTime}ms`);
+          setTransactionHash(swapReceipt.hash);
           setTransactionStatus("success");
           setSellAmount("");
           setReceiveAmount("");
@@ -1106,6 +1108,7 @@ export const useSwap = (): UseSwapReturn => {
     isLoadingQuote,
     prices,
     errorMessage,
+    transactionHash,
 
     // Actions
     setSellToken,
