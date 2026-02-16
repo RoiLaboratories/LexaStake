@@ -182,6 +182,14 @@ class PancakeSwapService {
       // Build the path (direct or through WBNB)
       const path = this.buildSwapPath(tokenIn, tokenOut);
 
+      // Validate amountIn is a string number
+      const amountInStr = String(amountIn).trim();
+      if (!amountInStr || isNaN(parseFloat(amountInStr))) {
+        throw new Error(`Invalid amountIn: expected a number string, got "${amountIn}"`);
+      }
+
+      console.log("📤 Sending quote request:", { path, amountIn: amountInStr, slippage });
+
       // Get amounts out
       const response = await fetch("/api/pancakeswap/quote", {
         method: "POST",
@@ -190,28 +198,39 @@ class PancakeSwapService {
         },
         body: JSON.stringify({
           path,
-          amountIn,
+          amountIn: amountInStr,
           slippage,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to fetch swap quote: ${(errorData as {error?: string}).error || response.statusText}`);
+        let errorMsg = response.statusText;
+        try {
+          const errorData = await response.json();
+          errorMsg = (errorData as {error?: string, details?: string}).error || 
+                    (errorData as {details?: string}).details || 
+                    errorMsg;
+        } catch (e) {
+          // Could not parse error response
+        }
+        throw new Error(`API returned ${response.status}: ${errorMsg}`);
       }
 
       const { amountOut, minimumAmountOut, priceImpact, path: responsePath } =
         await response.json();
 
+      console.log("✓ Quote received:", { amountOut, minimumAmountOut, priceImpact });
+
       return {
-        amountIn,
+        amountIn: amountInStr,
         amountOut,
         minimumAmountOut,
         priceImpact,
         path: responsePath || path,
       };
     } catch (error) {
-      console.error("Error fetching swap quote:", error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error("❌ Error fetching swap quote:", errorMsg);
       throw error;
     }
   }

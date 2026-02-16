@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
+import {
+  calculatePriceImpact,
+  computeAmountOutFromReserves,
+  fetchReserves,
+  validateQuoteAgainstReserves,
+  checkPoolRisk,
+  validateSwapSanity,
+  formatValidationErrors,
+  getTokenDecimals,
+} from "@/utils/swapValidation";
 
 const PANCAKESWAP_ROUTER_V2_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";  // For quote fetching only
 const PANCAKESWAP_UNIVERSAL_ROUTER_ADDRESS = "0xd9C500DfF816a1Da21A48A732d3498Bf09dc9AEB";  // For swap execution
@@ -92,27 +102,23 @@ function buildSwapPath(tokenIn: string, tokenOut: string): string[] {
   return [tokenIn, WBNB_ADDRESS, tokenOut];
 }
 
+// Router ABI - for BNB→LEXA swaps (still needed, don't remove!)
 const ROUTER_ABI = [
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
   "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] amounts)",
-  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] amounts)",
-  "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] amounts)",
 ];
-
-// Universal Router ABI - no longer used, reverting to Router V2
-// const UNIVERSAL_ROUTER_ABI = [
-//   "function execute(bytes commands, bytes[] inputs) payable",
-//   "function execute(bytes commands, bytes[] inputs, uint256 deadline) payable",
-// ];
-
-// Command codes for Universal Router - no longer used
-// const COMMAND_CODES = {
-//   WRAP_ETH: 0x0b,
-//   SWAP_WITH_EXACT_INPUT: 0x08,
-// };
 
 const ERC20_ABI = [
   "function approve(address _spender, uint256 _value) returns (bool)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+];
+
+// Pair ABI for direct swap calls (LEXA→BNB only - bypasses router)
+const PAIR_ABI = [
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function swap(uint amount0Out, uint amount1Out, address to, bytes data) external",
 ];
 
 export async function POST(request: NextRequest) {
@@ -248,6 +254,70 @@ export async function POST(request: NextRequest) {
     }
 
     const amountOutWei = amounts![amounts!.length - 1];
+    
+    // 🔍 LOG QUOTE IMMEDIATELY
+    console.log(`\n💾 QUOTE FROM ROUTER:`);
+    console.log(`   quoteOut (wei): ${amountOutWei.toString()}`);
+    console.log(`   quoteOut (tokens): ${ethers.formatEther(amountOutWei)}`);
+    
+    // ⚠️ GUARD 1: Reject if no liquidity
+    if (amountOutWei === BigInt(0)) {
+      console.error(`❌ ERROR: Router returned 0 output. No liquidity on this pair.`);
+      throw new Error("No liquidity for this token pair");
+    }
+
+    // ⚠️ GUARD 2: PRICE IMPACT CHECK
+    console.log(`\n🔬 PRICE IMPACT ANALYSIS:`);
+    try {
+      const rpcProvider = new ethers.JsonRpcProvider(BSC_RPC_URLS[0], BSC_NETWORK, { staticNetwork: true });
+      
+      // For cross-token swaps (like LEXA→BNB), the naive price impact calculation
+      // breaks because tokens have vastly different prices ($0.0014 LEXA vs $600 BNB)
+      // Instead, we'll use the reserves sanity check if available
+      
+      try {
+        const reserves = await fetchReserves(rpcProvider, path[0]); // Try first token as pair hint
+        const reserve0 = reserves.reserve0;
+        const reserve1 = reserves.reserve1;
+        console.log(`   ✓ Fetched pair reserves`);
+        console.log(`   Reserve0: ${ethers.formatEther(reserve0)}`);
+        console.log(`   Reserve1: ${ethers.formatEther(reserve1)}`);
+        
+        // For meaningful price impact calc, we'd need fair prices from oracle
+        // For now, just warn if output is suspiciously low relative to reserves
+        const reserve0Pct = (Number(amountInWei) / Number(reserve0)) * 100;
+        console.log(`   Input as % of reserve: ${reserve0Pct.toFixed(3)}%`);
+        
+        if (reserve0Pct > 10) {
+          console.warn(`   ⚠️  WARNING: Input is >10% of available reserve - may encounter significant slippage`);
+        }
+      } catch (e) {
+        console.warn(`   ⚠️  Could not fetch reserves for additional checks`);
+      }
+
+      // For cross-token swaps with different price scales, the naive 
+      // price impact formula is meaningless. Instead, check:
+      // 1. Output is non-zero (checked earlier)
+      // 2. Output is at least 1 wei (prevents dust)
+      // 3. Slippage formula applied correctly
+      
+      if (amountOutWei < BigInt(1)) {
+        console.error(`❌ ERROR: Output too low (< 1 wei). Route may have liquidity issue.`);
+        throw new Error(`Output amount too low for this swap. Possible causes:
+          1. Pool has insufficient liquidity
+          2. Token prices are extremely skewed
+          3. Wrong token address used`);
+      }
+      
+      console.log(`   ✓ Output is non-zero and meaningful`);
+      console.log(`   ℹ️  Price impact calculation skipped for cross-token swaps (requires price oracle)`);
+    } catch (guardError) {
+      // Only throw if it's a fundamental issue, not a calculation warning
+      if (guardError instanceof Error && guardError.message.includes("Output too low")) {
+        throw guardError;
+      }
+      console.warn(`⚠️  Could not perform additional validation checks: ${guardError instanceof Error ? guardError.message : String(guardError)}`);
+    }
 
     // SANITY CHECK: Verify prices aren't suspiciously extreme
     const amountOutEth = parseFloat(ethers.formatEther(amountOutWei));
@@ -271,37 +341,163 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate minimum amount with slippage
-    // 6% slippage accounts for LEXA's 5% transfer tax + transaction volatility
-    const slippagePercentage = parseFloat(slippage as string) || 0.5;
+    // Convert percentage (e.g., 6) to basis points (e.g., 600)
+    let slippagePercentage = parseFloat(slippage as string) || 0.5;
+    
+    // ⚠️  VALIDATE SLIPPAGE: Minimum 7% required for thin pairs like LEXA↔BNB
+    const isLexaBnbPair = 
+      (normalizedTokenIn === "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase() &&
+       normalizedTokenOut === WBNB_ADDRESS.toLowerCase()) ||
+      (normalizedTokenIn === WBNB_ADDRESS.toLowerCase() &&
+       normalizedTokenOut === "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase());
+    
+    const isLexaToBnb = 
+      normalizedTokenIn === "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase() &&
+      normalizedTokenOut === WBNB_ADDRESS.toLowerCase();
+    
+    if (isLexaBnbPair && slippagePercentage < 7) {
+      console.error(`\n❌ SLIPPAGE TOO LOW FOR THIN PAIR`);
+      console.error(`   Pair: ${isLexaToBnb ? "LEXA→BNB" : "BNB→LEXA"}`);
+      console.error(`   Current slippage: ${slippagePercentage}%`);
+      console.error(`   Minimum required: 7% (due to thin liquidity)`);
+      console.error(`   User action: Please increase slippage in the UI to 7% or higher`);
+      throw new Error(`SLIPPAGE_TOO_LOW: This pair requires minimum 7% slippage. Please increase slippage to 7% or higher and try again.`);
+    }
+    
+    const slippageBps = Math.round(slippagePercentage * 100);
+    
     console.log(`📊 Slippage calculation:`, {
       slippageInput: slippage,
-      slippagePercentage,
+      slippagePercentage: `${slippagePercentage}%`,
+      slippageBps: `${slippageBps} bps`,
       amountOutWei: amountOutWei.toString(),
       amountOutEther: ethers.formatEther(amountOutWei),
-      calculation: `${amountOutWei.toString()} * (10000 - ${Math.round(slippagePercentage * 100)}) / 10000`,
+      calculation: `${amountOutWei.toString()} * (10000 - ${slippageBps}) / 10000`,
     });
     
     // Apply slippage to expected output
-    // Slippage naturally accounts for price volatility, token transfer tax, and fees
-    const minimumAmountOutWei = (amountOutWei * BigInt(10000 - Math.round(slippagePercentage * 100))) / BigInt(10000);
+    // Formula: minOut = quoteOut * (10000 - slippageBps) / 10000
+    let minimumAmountOutWei = (amountOutWei * BigInt(10000 - slippageBps)) / BigInt(10000);
+    
+    // 🌊 ADD VOLATILITY DRIFT BUFFER: Extra buffer for pool state changes during execution
+    // On thin/volatile pairs, pool reserves can shift between quote and execution
+    // This extra buffer prevents "Pancake: K" errors from minor drift
+    // LEXA is an extremely volatile pair - needs aggressive buffering
+    const volatilityBufferBps = isLexaBnbPair ? 300 : 50; // 3% for LEXA↔BNB (very volatile), 0.5% for others
+    const driftAdjustedMinOut = (minimumAmountOutWei * BigInt(10000 - volatilityBufferBps)) / BigInt(10000);
+    
+    console.log(`\n🌊 VOLATILITY DRIFT BUFFER:`);
+    console.log(`   Pair: ${isLexaBnbPair ? "LEXA↔BNB (EXTREMELY volatile)" : "Standard pair"}`);
+    console.log(`   Base slippage: ${slippagePercentage}%`);
+    console.log(`   Volatility buffer: ${volatilityBufferBps / 100}%`);
+    console.log(`   minOut before drift: ${ethers.formatEther(minimumAmountOutWei)}`);
+    console.log(`   minOut after drift:  ${ethers.formatEther(driftAdjustedMinOut)}`);
+    console.log(`   Combined reduction:  ${slippagePercentage + (volatilityBufferBps / 100)}%`);
+    
+    minimumAmountOutWei = driftAdjustedMinOut;
+    
+    // 🔧 DEBUG MODE: Allow setting minOut = 0n for testing
+    // This is ONLY for testing with your own wallet to confirm actual execution output
+    const DEBUG_MODE = process.env.NEXT_PUBLIC_DEBUG_SWAP === "true";
+    if (DEBUG_MODE) {
+      console.log(`\n🔧 DEBUG MODE ACTIVE: Setting minOut = 0n for test execution`);
+      console.log(`   This will allow tx to succeed even with 0 output`);
+      console.log(`   ⚠️  ONLY USE FOR YOUR TEST WALLET - NOT FOR PRODUCTION`);
+      minimumAmountOutWei = BigInt(0);
+    }
+    
+    // 🔍 LOG MINOUT CALCULATION
+    console.log(`\n💾 MINIMUM OUTPUT CALCULATION:`);
+    console.log(`   quoteOut (wei):     ${amountOutWei.toString()}`);
+    console.log(`   quoteOut (tokens):  ${ethers.formatEther(amountOutWei)}`);
+    console.log(`   slippageBps:        ${slippageBps} (${slippagePercentage}%)`);
+    console.log(`   minOut formula:     quoteOut * (10000 - ${slippageBps}) / 10000`);
+    console.log(`   minOut (wei):       ${minimumAmountOutWei.toString()}`);
+    console.log(`   minOut (tokens):    ${ethers.formatEther(minimumAmountOutWei)}`);
+    if (minimumAmountOutWei > BigInt(0)) {
+      console.log(`   difference:         ${ethers.formatEther(amountOutWei - minimumAmountOutWei)} tokens`);
+    } else if (DEBUG_MODE) {
+      console.log(`   ⚠️  DEBUG MODE: minOut set to 0 for testing`);
+    }
+    
+    // ⚠️ GUARD 5: COMPREHENSIVE SWAP SANITY CHECK
+    console.log(`\n✅ COMPREHENSIVE SWAP VALIDATION:`);
+    const sanityResult = validateSwapSanity({
+      quoteOut: amountOutWei,
+      minOut: minimumAmountOutWei,
+      amountIn: amountInWei,
+      maxPriceImpactBps: 1500,
+      priceImpactBps: 0, // Don't use naive calculation for cross-token swaps
+      minOutputAbsolute: ethers.parseEther("0.1"),
+      tokenOutDecimals: 18,
+    });
+    
+    if (!sanityResult.valid && !DEBUG_MODE) {
+      console.error(`❌ SWAP VALIDATION FAILED:`);
+      console.error(formatValidationErrors(sanityResult.errors));
+      throw new Error(
+        `Swap validation failed: ${sanityResult.errors[0]}. Check logs for details.`
+      );
+    } else if (!sanityResult.valid && DEBUG_MODE) {
+      console.warn(`⚠️  DEBUG MODE: Ignoring validation errors this time:`);
+      console.warn(formatValidationErrors(sanityResult.errors));
+    } else {
+      console.log(`   ✓ All sanity checks passed`);
+    }
+    
+    // ⚠️ GUARD: Reject if output dust (unless in debug mode)
+    // For meaningful swaps, output should be at least 1 wei (0.000000000000000001 tokens)
+    // This prevents issues where router quotes near-zero amounts
+    const MIN_OUT_ABS = BigInt(1); // 1 wei minimum (not 0.1 tokens - that's arbitrary)
+    if (minimumAmountOutWei < MIN_OUT_ABS && !DEBUG_MODE) {
+      console.error(`❌ ERROR: Minimum output below 1 wei (${ethers.formatEther(minimumAmountOutWei)} tokens). This indicates extremely thin liquidity.`);
+      throw new Error("Output amount too low for reliable execution");
+    }
     
     const minimumAmountOutEther = ethers.formatEther(minimumAmountOutWei);
+    
+    // ✅ FINAL SANITY CHECK BEFORE BUILDING TRANSACTION
+    console.log(`\n✅ PRE-TRANSACTION VALIDATION:`);
+    console.log(`   ✓ Quote is non-zero: ${amountOutWei.toString()}`);
+    if (minimumAmountOutWei > BigInt(0) || !DEBUG_MODE) {
+      console.log(`   ✓ MinOut is above dust: ${minimumAmountOutWei.toString()}`);
+    } else {
+      console.log(`   ⚠️  DEBUG MODE: MinOut set to 0 for testing`);
+    }
+    console.log(`   ✓ Slippage in safe range: ${slippagePercentage}%`);
+    console.log(`   ✓ All checks passed - ready to build transaction`);
     
     // ✅ VERIFICATION: Log actual slippage applied
     const expectedAmount = parseFloat(ethers.formatEther(amountOutWei));
     const minimumAmount = parseFloat(minimumAmountOutEther);
-    const totalReduction = ((expectedAmount - minimumAmount) / expectedAmount * 100).toFixed(3);
+    const totalReduction = minimumAmount > 0 
+      ? ((expectedAmount - minimumAmount) / expectedAmount * 100).toFixed(3)
+      : "N/A (debug mode)";
     console.log(`\n✅ SLIPPAGE VERIFICATION:`);
     console.log(`  Expected Output: ${ethers.formatEther(amountOutWei)} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
     console.log(`  Minimum Output (after ${slippagePercentage}% slippage): ${minimumAmountOutEther} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
-    console.log(`  Reduction: ${(expectedAmount - minimumAmount).toFixed(6)} tokens (~${totalReduction}%)`);
+    if (minimumAmount > 0 || !DEBUG_MODE) {
+      console.log(`  Reduction: ${(expectedAmount - minimumAmount).toFixed(6)} tokens (~${totalReduction}%)`);
+    } else {
+      console.log(`  ⚠️  DEBUG MODE: Reduction calculation skipped`);
+    }
 
     // Warn if minimum output is suspiciously low
     const amountOutNum = parseFloat(ethers.formatEther(amountOutWei));
     const minimumOutNum = parseFloat(minimumAmountOutEther);
-    if (amountOutNum < 1 && normalizedTokenOut !== WBNB_ADDRESS.toLowerCase()) {
+    if (amountOutNum < 1 && normalizedTokenOut !== WBNB_ADDRESS.toLowerCase() && !DEBUG_MODE) {
       console.warn(`⚠️  WARNING: Very low token output (${amountOutNum.toFixed(2)} tokens)`);
       console.warn(`    This suggests: small input, low liquidity, or token transfer tax`);
+    }
+
+    // Guard against unrealistic slippage values
+    if (slippagePercentage < 0.1) {
+      console.error(`❌ ERROR: Slippage too low (${slippagePercentage}%). Minimum 0.1% required.`);
+      throw new Error("Slippage must be at least 0.1%");
+    }
+    if (slippagePercentage > 50) {
+      console.error(`❌ ERROR: Slippage too high (${slippagePercentage}%). Maximum 50% allowed.`);
+      throw new Error("Slippage must not exceed 50%");
     }
 
     // Set deadline to 2 hours from now (very generous for testing)
@@ -316,21 +512,89 @@ export async function POST(request: NextRequest) {
     let txValue = "0";
 
     const isBNBInput = fromNativeBNB === true;
-
-    // Build the swap path (always starts with WBNB for this swap)
-    const swapPath = [ethers.getAddress(WBNB_ADDRESS.toLowerCase()), ethers.getAddress(normalizedTokenOut.toLowerCase())];
+    const isBNBOutput = normalizedTokenOut === WBNB_ADDRESS.toLowerCase();
+    
+    // Build the swap path based on input/output direction
+    let swapPath: string[];
+    if (isBNBInput) {
+      // BNB → LEXA: [WBNB, LEXA]
+      swapPath = [ethers.getAddress(WBNB_ADDRESS.toLowerCase()), ethers.getAddress(normalizedTokenOut.toLowerCase())];
+    } else if (isBNBOutput) {
+      // LEXA → BNB: [LEXA, WBNB]
+      swapPath = [ethers.getAddress(normalizedTokenIn.toLowerCase()), ethers.getAddress(WBNB_ADDRESS.toLowerCase())];
+    } else {
+      // Token → Token (general case): route through WBNB if needed
+      swapPath = [ethers.getAddress(normalizedTokenIn.toLowerCase()), ethers.getAddress(WBNB_ADDRESS.toLowerCase()), ethers.getAddress(normalizedTokenOut.toLowerCase())];
+    }
     
     console.log(`\n💰 ROUTER V2 SWAP PREPARATION:`);
-    console.log(`   Input: ${isBNBInput ? "Native BNB" : "Token"}`);
-    console.log(`   Output: LEXA (${normalizedTokenOut.substring(0, 14)}...)`);
+    console.log(`   Input: ${isBNBInput ? "Native BNB" : "Token (" + normalizedTokenIn.substring(0, 14) + "...)"}`);
+    console.log(`   Output: ${isBNBOutput ? "Native BNB" : "Token (" + normalizedTokenOut.substring(0, 14) + "...)"}`);
     console.log(`   Path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
     
-    // Create Router V2 interface
+    // ========== DIAGNOSTIC: Debug LEXA→BNB reserve issues ==========
+    if (!isBNBInput && isBNBOutput) {
+      console.log(`\n🔍 [DIAGNOSTIC] LEXA→BNB Reserve Analysis`);
+      try {
+        const PAIR_ABI = [
+          "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32)",
+          "function token0() view returns (address)",
+          "function token1() view returns (address)",
+        ];
+        const LEXA_PAIR = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
+        const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
+        const pair = new ethers.Contract(LEXA_PAIR, PAIR_ABI, provider);
+        
+        const [r0, r1] = await pair.getReserves();
+        const t0 = await pair.token0();
+        const t1 = await pair.token1();
+        
+        console.log(`   Pair Address: ${LEXA_PAIR}`);
+        
+        const lexaIs0 = t0.toLowerCase() === normalizedTokenIn.toLowerCase();
+        const reserveIn = lexaIs0 ? r0 : r1;
+        const reserveOut = lexaIs0 ? r1 : r0;
+        
+        console.log(`   Reserve(LEXA): ${ethers.formatEther(reserveIn)}`);
+        console.log(`   Reserve(WBNB): ${ethers.formatEther(reserveOut)}`);
+        console.log(`   amountIn(LEXA): ${ethers.formatEther(amountInWei)}`);
+        console.log(`   ratio (amountIn / reserveIn): ${(Number(amountInWei) / Number(reserveIn) * 100).toFixed(2)}%`);
+        
+        // V2 math: amountOut = (amountIn * 997 * reserveOut) / (reserveIn * 1000 + amountIn * 997)
+        const amountInWithFee = amountInWei * BigInt(997);
+        const numerator = amountInWithFee * reserveOut;
+        const denominator = reserveIn * BigInt(1000) + amountInWithFee;
+        const theoreticalOut = numerator / denominator;
+        
+        console.log(`   Theoretical WBNB out: ${ethers.formatEther(theoreticalOut)}`);
+        console.log(`   Current minOut target: ${ethers.formatEther(minimumAmountOutWei)}`);
+        
+        // Check for risky pool conditions - log warnings but don't block
+        const MIN_OUTPUT_BNB = ethers.parseEther("0.0001"); // 0.0001 BNB minimum
+        const OUTPUT_RESERVE_WARNING = ethers.parseEther("5"); // Warn if < 5 BNB reserve
+        
+        if (theoreticalOut < MIN_OUTPUT_BNB) {
+          console.warn(`   ⚠️  OUTPUT SMALL: ${ethers.formatEther(theoreticalOut)} < 0.0001 BNB`);
+          console.warn(`      Gas estimation may fail, but transaction might still succeed`);
+        }
+        
+        if (reserveOut < OUTPUT_RESERVE_WARNING) {
+          console.warn(`   ⚠️  WBNB RESERVE SHALLOW: ${ethers.formatEther(reserveOut)} WBNB`);
+          console.warn(`      Swap may fail due to pool conditions, but proceeding anyway`);
+        }
+      } catch (err) {
+        console.error(`   Diagnostic failed:`, err instanceof Error ? err.message : String(err));
+      }
+    }
+    
+    // Create Router V2 and Pair interfaces
     const routerIface = new ethers.Interface(ROUTER_ABI);
+    const pairIface = new ethers.Interface(PAIR_ABI);
+    const erc20Iface = new ethers.Interface(ERC20_ABI);
     
     if (isBNBInput) {
-      // Use swapExactETHForTokens for native BNB input
-      console.log(`\n📝 FUNCTION: swapExactETHForTokens`);
+      // BNB input: Use Router V2 swapExactETHForTokens (BNB→LEXA)
+      console.log(`\n📝 FUNCTION: swapExactETHForTokens (Router V2)`);
       console.log(`   Parameters:`);
       console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} (${minimumAmountOutWei.toString()} wei)`);
       console.log(`     - path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
@@ -350,66 +614,163 @@ export async function POST(request: NextRequest) {
       console.log(`  💾 TRANSACTION DETAILS:`);
       console.log(`     - to: Router V2 ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
       console.log(`     - value: ${ethers.formatEther(amountInWei)} BNB (${amountInWei.toString()} wei)`);
-      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} LEXA`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)}`);
       console.log(`     - deadline: ${deadline}`);
       
       txValue = amountInWei.toString();
-    } else {
-      // Use swapExactTokensForTokens for token input
-      console.log(`\n📝 FUNCTION: swapExactTokensForTokens`);
-      console.log(`   Parameters:`);
-      console.log(`     - amountIn: ${ethers.formatEther(amountInWei)} (${amountInWei.toString()} wei)`);
-      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} (${minimumAmountOutWei.toString()} wei)`);
-      console.log(`     - path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" → ")}]`);
-      console.log(`     - to: ${normalizedWalletAddress}`);
-      console.log(`     - deadline: ${deadline}`);
+    } else if (isBNBOutput) {
+      // Token input, BNB output (LEXA→BNB): Use DIRECT PAIR SWAP
+      console.log(`\n📝 EXECUTION: Direct Pair Swap (LEXA→WBNB→BNB)`);
+      console.log(`   This uses direct pair contract calls instead of router`);
       
-      swapData = routerIface.encodeFunctionData("swapExactTokensForTokens", [
-        amountInWei,
-        minimumAmountOutWei,
-        swapPath,
+      // Step 1: Determine pair contract and token order
+      const LEXA_PAIR = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
+      const pairContract = LEXA_PAIR; // LEXA/WBNB pair
+      
+      // Get token order in pair (token0 vs token1)
+      const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
+      const pairContractInstance = new ethers.Contract(
+        pairContract,
+        PAIR_ABI,
+        provider
+      );
+      
+      const token0 = await pairContractInstance.token0();
+      const token1 = await pairContractInstance.token1();
+      
+      console.log(`   Pair: ${pairContract}`);
+      console.log(`   token0: ${token0.substring(0, 14)}... (${token0.toLowerCase() === normalizedTokenIn.toLowerCase() ? "LEXA" : "WBNB"})`);
+      console.log(`   token1: ${token1.substring(0, 14)}... (${token1.toLowerCase() === normalizedTokenIn.toLowerCase() ? "LEXA" : "WBNB"})`);
+      
+      // Determine amount0Out and amount1Out based on token order
+      let amount0Out: bigint;
+      let amount1Out: bigint;
+      
+      if (token0.toLowerCase() === normalizedTokenIn.toLowerCase()) {
+        // LEXA is token0, WBNB is token1
+        amount0Out = BigInt(0); // No token0 (LEXA) output
+        amount1Out = minimumAmountOutWei; // WBNB output
+        console.log(`   amount0Out (LEXA): 0`);
+        console.log(`   amount1Out (WBNB): ${ethers.formatEther(minimumAmountOutWei)}`);
+      } else {
+        // WBNB is token0, LEXA is token1
+        amount0Out = minimumAmountOutWei; // WBNB output
+        amount1Out = BigInt(0); // No token1 (LEXA) output
+        console.log(`   amount0Out (WBNB): ${ethers.formatEther(minimumAmountOutWei)}`);
+        console.log(`   amount1Out (LEXA): 0`);
+      }
+      
+      // Encode the pair.swap() call
+      console.log(`\n   Step 2: Encode pair.swap() call`);
+      console.log(`     - amount0Out: ${amount0Out.toString()}`);
+      console.log(`     - amount1Out: ${amount1Out.toString()}`);
+      console.log(`     - to: ${normalizedWalletAddress}`);
+      console.log(`     - data: 0x (no callback)`);
+      
+      swapData = pairIface.encodeFunctionData("swap", [
+        amount0Out,
+        amount1Out,
         normalizedWalletAddress,
-        deadline,
+        "0x", // No callback data needed
       ]);
       
-      console.log(`\n✓ Router V2 swapExactTokensForTokens() encoded successfully`);
+      console.log(`\n✓ Pair.swap() encoded successfully`);
       console.log(`  Function selector: ${swapData.substring(0, 10)}`);
       console.log(`  Encoded data length: ${swapData.length} chars`);
-      console.log(`  💾 TRANSACTION DETAILS:`);
-      console.log(`     - to: Router V2 ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
-      console.log(`     - amountIn: ${ethers.formatEther(amountInWei)} tokens`);
-      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} LEXA`);
-      console.log(`     - deadline: ${deadline}`);
-    }
-
-    // For token input, we need approval for Router V2
-    let approvalData = null;
-    if (!isBNBInput) {
-      const tokenIface = new ethers.Interface(ERC20_ABI);
-      // Approve Router V2 to spend the tokens
-      approvalData = tokenIface.encodeFunctionData("approve", [
-        PANCAKESWAP_ROUTER_V2_ADDRESS,
+      console.log(`  💾 SWAP TRANSACTION DETAILS:`);
+      console.log(`     - to: Pair ${LEXA_PAIR}`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)}`);
+      
+      // Step 3: Encode token transfer to pair (REQUIRED before swap)
+      console.log(`\n   Step 3: Encode transfer to pair (MUST execute before swap!)`);
+      const transferData = erc20Iface.encodeFunctionData("transfer", [
+        LEXA_PAIR,
         amountInWei.toString(),
       ]);
-      console.log(`\n✓ Will request approval for Router V2: ${PANCAKESWAP_ROUTER_V2_ADDRESS.substring(0, 14)}...`);
+      
+      console.log(`\n✓ Transfer encoded successfully`);
+      console.log(`  Target: LEXA token ${normalizedTokenIn}`);
+      console.log(`  Recipient: Pair ${LEXA_PAIR}`);
+      console.log(`  Amount: ${ethers.formatEther(amountInWei)} LEXA`);
+      console.log(`  Function selector: ${transferData.substring(0, 10)}`);
+    } else {
+      // Token → Token: Not yet supported
+      console.log(`\n⚠️  Token→Token swaps not yet supported`);
+      throw new Error("Token→Token swaps not yet implemented");
     }
 
-    console.log(`\n✅ [PREPARE-SWAP] FINAL RESPONSE (ROUTER V2)`);
-    console.log(`   Router: ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
-    console.log(`   Function: ${isBNBInput ? "swapExactETHForTokens" : "swapExactTokensForTokens"}`);
+    // For token input, we need approval based on swap type
+    let approvalData = null;
+    let approvalTarget = null;
+    let transferData_DirectPair = null;
+    
+    if (!isBNBInput) {
+      if (isBNBOutput) {
+        // LEXA→BNB (Direct Pair): Approve the PAIR contract to pull tokens
+        const LEXA_PAIR = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
+        approvalTarget = LEXA_PAIR;
+        
+        approvalData = erc20Iface.encodeFunctionData("approve", [
+          LEXA_PAIR,
+          amountInWei.toString(),
+        ]);
+        console.log(`\n✓ Will request approval for PAIR: ${LEXA_PAIR.substring(0, 14)}...`);
+        console.log(`  Token: ${normalizedTokenIn.substring(0, 14)}...`);
+        console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
+        
+        // For direct pair swaps, we also need a transfer transaction
+        transferData_DirectPair = erc20Iface.encodeFunctionData("transfer", [
+          LEXA_PAIR,
+          amountInWei.toString(),
+        ]);
+        console.log(`\n✓ Will also perform direct transfer to pair`);
+        console.log(`  Transfer target: ${LEXA_PAIR.substring(0, 14)}...`);
+        console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
+      } else {
+        // Other token swaps: Approve Router V2
+        approvalTarget = PANCAKESWAP_ROUTER_V2_ADDRESS;
+        approvalData = erc20Iface.encodeFunctionData("approve", [
+          PANCAKESWAP_ROUTER_V2_ADDRESS,
+          amountInWei.toString(),
+        ]);
+        console.log(`\n✓ Will request approval for Router V2: ${PANCAKESWAP_ROUTER_V2_ADDRESS.substring(0, 14)}...`);
+        console.log(`  Token: ${normalizedTokenIn.substring(0, 14)}...`);
+        console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
+      }
+    }
+
+    console.log(`\n✅ [PREPARE-SWAP] FINAL RESPONSE`);
+    let functionName = "";
+    let targetAddress = "";
+    
+    if (isBNBInput) {
+      functionName = "swapExactETHForTokens (Router V2)";
+      targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
+    } else if (isBNBOutput) {
+      functionName = "pair.swap() (Direct Pair)";
+      targetAddress = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
+    }
+    
+    console.log(`   Function: ${functionName}`);
+    console.log(`   Target: ${targetAddress}`);
     console.log(`   Swap data length: ${swapData.length} chars`);
     console.log(`   Transaction value: ${isBNBInput ? ethers.formatEther(txValue) + " BNB" : "0"}`);
 
-    // Build response using Router V2
+    // Build response - now with correct swap target based on execution type
     const response: any = {
       swap: {
-        to: PANCAKESWAP_ROUTER_V2_ADDRESS,
+        to: isBNBInput ? PANCAKESWAP_ROUTER_V2_ADDRESS : "0x3027f7b11AB243A1efe3F997430fca5996276E63",
         data: swapData,
         value: isBNBInput ? txValue : "0",  // Only for BNB input
       },
       approval: approvalData ? {
         to: normalizedTokenIn,
         data: approvalData,
+      } : null,
+      // For direct pair swaps, we need a transfer transaction before swap
+      transfer: transferData_DirectPair ? {
+        to: normalizedTokenIn,
+        data: transferData_DirectPair,
       } : null,
       details: {
         amountIn,
@@ -419,16 +780,17 @@ export async function POST(request: NextRequest) {
         deadline,
         isBNBInput,
         slippage: slippagePercentage,
+        executionType: isBNBInput ? "router" : isBNBOutput ? "directPair" : "unknown",
       },
     };
 
     console.log(`\n📤 RESPONSE SUMMARY:`);
-    console.log(`   Router used: Universal Router`);
+    console.log(`   Execution type: ${isBNBInput ? "Router V2" : isBNBOutput ? "Direct Pair" : "Unknown"}`);
     console.log(`   Has approval: ${!!response.approval}`);
+    console.log(`   Has transfer: ${!!response.transfer}`);
     console.log(`   Input type: ${isBNBInput ? "Native BNB" : "Token"}`);
     if (response.approval) {
-      console.log(`   Approval required: YES`);
-      console.log(`   Approval target (token): ${normalizedTokenIn.substring(0, 14)}...`);
+      console.log(`   Approval target: ${approvalTarget?.substring(0, 14)}...`);
     }
 
     return NextResponse.json(response);

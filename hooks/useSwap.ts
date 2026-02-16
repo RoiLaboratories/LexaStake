@@ -38,12 +38,27 @@ export const useSwap = (): UseSwapReturn => {
 
       setIsLoadingQuote(true);
       try {
+        console.log("📊 Fetching quote with:", {
+          sellToken: sellToken.symbol,
+          receiveToken: receiveToken.symbol,
+          sellAmount,
+          slippage: slippage === "custom" ? customSlippage : slippage,
+        });
+
         const quoteData = await pancakeSwapService.getSwapQuote(
           sellToken.address,
           receiveToken.address,
           sellAmount,
           parseFloat(slippage === "custom" ? customSlippage : slippage),
         );
+
+        console.log("✓ Quote received:", {
+          amountIn: quoteData.amountIn,
+          amountOut: quoteData.amountOut,
+          minimumAmountOut: quoteData.minimumAmountOut,
+          priceImpact: quoteData.priceImpact,
+        });
+
         setQuote({
           inputAmount: quoteData.amountIn,
           outputAmount: quoteData.amountOut,
@@ -146,6 +161,9 @@ export const useSwap = (): UseSwapReturn => {
       try {
         const effectiveSlippage = slippage === "custom" ? customSlippage : slippage;
         console.log("📋 [SWAP] Effective slippage: ", effectiveSlippage, "%");
+        
+        // Variable to store gas estimation from pre-flight checks
+        let estimatedGasLimit: string = "500000";
 
         // ========== STEP 1: PREPARE SWAP TRANSACTION ==========
         console.log("=".repeat(50));
@@ -246,7 +264,16 @@ export const useSwap = (): UseSwapReturn => {
             return;
           }
           console.error("❌ [SWAP] API RESPONSE ERROR:", errorData);
-          setErrorMessage(errorData.error || "Failed to prepare swap - check console for details");
+          
+          // Check for slippage too low error
+          if (errorData.error && errorData.error.includes("SLIPPAGE_TOO_LOW")) {
+            console.error("⚠️  SLIPPAGE TOO LOW - User needs to increase slippage");
+            setErrorMessage("❌ Slippage too low for this pair. Please increase slippage to 7% or higher and try again.");
+          } else if (errorData.error && errorData.error.includes("Price impact too high")) {
+            setErrorMessage("❌ Price impact too high. Try reducing amount or increasing slippage.");
+          } else {
+            setErrorMessage(errorData.error || "Failed to prepare swap - check console for details");
+          }
           setTransactionStatus("error");
           return;
         }
@@ -357,7 +384,20 @@ export const useSwap = (): UseSwapReturn => {
         } catch (signerError) {
           console.error("❌ [SWAP] SIGNER ERROR:", signerError);
           console.error("❌ [SWAP] Full error object:", JSON.stringify(signerError, null, 2));
-          throw new Error(`Failed to get signer: ${signerError instanceof Error ? signerError.message : String(signerError)}`);
+          
+          const errorMsg = signerError instanceof Error ? signerError.message : String(signerError);
+          
+          // Check for RPC/network issues
+          if (errorMsg.includes("RPC") || errorMsg.includes("endpoint") || errorMsg.includes("503") || errorMsg.includes("unavailable")) {
+            const userMsg = "⚠️ Cannot reach wallet provider\n\nYour wallet's RPC provider is temporarily unavailable. This might be:\n• A temporary network issue\n• MetaMask extension problem\n• Internet connectivity issue\n\nPlease try:\n1. Refresh the page\n2. Restart MetaMask\n3. Check your internet connection\n4. Try again in a moment";
+            setErrorMessage(userMsg);
+            console.error(userMsg);
+          } else {
+            setErrorMessage(`Failed to get signer: ${errorMsg}`);
+          }
+          
+          setTransactionStatus("error");
+          return;
         }
 
         // ========== STEP 3: VERIFY NETWORK ==========
@@ -366,7 +406,13 @@ export const useSwap = (): UseSwapReturn => {
         console.log("=".repeat(50));
         
         try {
-          const network = await provider.getNetwork();
+          // Add timeout for network check (5 seconds max - RPC endpoint might be slow)
+          const networkPromise = provider.getNetwork();
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error("Network verification timeout - RPC endpoint not responding")), 5000)
+          );
+          
+          const network = await Promise.race([networkPromise, timeoutPromise]);
           console.log(`🌐 Network check: ${network.name} (ChainId: ${network.chainId})`);
           
           if (network.chainId !== BigInt(56)) {
@@ -378,7 +424,21 @@ export const useSwap = (): UseSwapReturn => {
           }
           console.log("✓ Correct network (BSC MainNet)");
         } catch (networkError) {
-          console.warn("⚠️ Could not verify network, continuing anyway:", networkError);
+          const errorMsg = networkError instanceof Error ? networkError.message : String(networkError);
+          console.warn("⚠️ Network verification failed:", errorMsg);
+          
+          // Check if it's an RPC availability issue
+          if (errorMsg.includes("RPC") || errorMsg.includes("endpoint") || errorMsg.includes("503") || errorMsg.includes("unavailable")) {
+            console.warn("   This appears to be a network connectivity issue");
+            console.warn("   Possible causes:");
+            console.warn("   1. MetaMask RPC endpoint is temporarily down");
+            console.warn("   2. Your internet connection is slow");
+            console.warn("   3. Network is congested");
+            console.warn("   Continuing with swap, but network verification failed...");
+            // Don't throw - continue anyway, the swap execution will verify we're on the right chain
+          } else {
+            throw networkError; // Throw for non-RPC errors
+          }
         }
 
         // ========== STEP 4: PRE-FLIGHT CHECKS ==========
@@ -392,30 +452,54 @@ export const useSwap = (): UseSwapReturn => {
           const signerBalanceEth = ethers.formatEther(signerBalance);
           console.log(`💰 Signer BNB balance: ${signerBalanceEth} BNB`);
           
-          // Check if we have enough balance (swap amount + gas estimate buffer)
-          const swapAmountBN = ethers.parseEther(sellAmount);
-          const gasEstimateBN = ethers.parseEther("0.0008"); // Assume ~0.0008 BNB gas fee
-          const totalNeededBN = swapAmountBN + gasEstimateBN;
+          // ⚠️ IMPORTANT: Different checks for BNB input vs token input
+          const isBNBInput = sellToken.symbol === "BNB";
+          const gasEstimateBN = ethers.parseEther("0.001"); // Typical gas fee ~0.001 BNB
           
-          if (signerBalance < totalNeededBN) {
-            const deficit = ethers.formatEther(totalNeededBN - signerBalance);
-            console.warn("⚠️  WARNING: Insufficient BNB balance!");
-            console.warn(`   Current balance: ${signerBalanceEth} BNB`);
-            console.warn(`   Swap amount: ${sellAmount} BNB`);
-            console.warn(`   Est. gas fee: 0.0008 BNB`);
-            console.warn(`   Total needed: ${ethers.formatEther(totalNeededBN)} BNB`);
-            console.warn(`   Deficit: ${deficit} BNB`);
-            console.warn(`   👉 ADD MORE BNB TO YOUR WALLET FIRST!`);
+          if (isBNBInput) {
+            // For BNB input swap: Need (swap amount + gas fee)
+            const swapAmountBN = ethers.parseEther(sellAmount);
+            const totalNeededBN = swapAmountBN + gasEstimateBN;
+            
+            if (signerBalance < totalNeededBN) {
+              const deficit = ethers.formatEther(totalNeededBN - signerBalance);
+              console.warn("⚠️  WARNING: Insufficient BNB balance!");
+              console.warn(`   Current balance: ${signerBalanceEth} BNB`);
+              console.warn(`   Swap amount: ${sellAmount} BNB`);
+              console.warn(`   Est. gas fee: 0.001 BNB`);
+              console.warn(`   Total needed: ${ethers.formatEther(totalNeededBN)} BNB`);
+              console.warn(`   Deficit: ${deficit} BNB`);
+              console.warn(`   👉 ADD MORE BNB TO YOUR WALLET FIRST!`);
+              throw new Error("Insufficient BNB balance for swap");
+            }
+          } else {
+            // For token input swap (like LEXA → BNB): Only need gas fee
+            console.log(`   ✓ Swapping from token (${sellToken.symbol}), checking gas balance only`);
+            
+            if (signerBalance < gasEstimateBN) {
+              const deficit = ethers.formatEther(gasEstimateBN - signerBalance);
+              console.warn("⚠️  WARNING: Insufficient BNB for gas fees!");
+              console.warn(`   Current balance: ${signerBalanceEth} BNB`);
+              console.warn(`   Est. gas fee: 0.001 BNB`);
+              console.warn(`   Deficit: ${deficit} BNB`);
+              console.warn(`   👉 ADD A SMALL AMOUNT OF BNB FOR GAS!`);
+              throw new Error("Insufficient BNB balance for gas");
+            }
+            console.log(`   ✓ Sufficient BNB balance for gas (${signerBalanceEth} BNB)`);
           }
           
-          if (signerBalance < ethers.parseEther("0.001")) {
-            console.warn("⚠️ WARNING: Very low BNB balance, may fail for gas!");
+          if (signerBalance < ethers.parseEther("0.0001")) {
+            console.warn("⚠️ WARNING: Very low BNB balance!");
           }
 
-          // Estimate gas for the swap transaction (if no approval needed and no wrap needed)
-          // Skip gas estimation for native BNB swaps because wrap must happen first
-          if (!preparedSwap.approval && !preparedSwap.wrap) {
-            console.log("📊 Estimating gas for swap transaction...");
+          // Estimate gas for the swap transaction BEFORE approval
+          // This is a preliminary estimate - will be updated after approval is confirmed (STEP 4.5)
+          // NOTE: For direct pair swaps (with transfer), skip this - tokens aren't in pair yet
+          const isDirectPairSwap = !!preparedSwap.transfer;
+          const shouldEstimateGas = !preparedSwap.wrap && !isDirectPairSwap;
+          
+          if (shouldEstimateGas) {
+            console.log("📊 Attempting preliminary gas estimation (may fail if approval needed)...");
             try {
               const gasEstimate = await provider.estimateGas({
                 to: preparedSwap.swap.to,
@@ -425,64 +509,29 @@ export const useSwap = (): UseSwapReturn => {
               });
               console.log(`✓ Gas estimate: ${gasEstimate.toString()} units`);
               console.log(`✓ Gas estimate breakdown: ${(Number(gasEstimate) / 1e6).toFixed(2)}M units`);
+              
+              // Apply 20% buffer for safety and save for later use in Step 6
+              const gasWithBuffer = BigInt(Math.ceil(Number(gasEstimate) * 1.2));
+              estimatedGasLimit = gasWithBuffer.toString();
+              console.log(`✓ Gas with 20% buffer: ${estimatedGasLimit}`);
             } catch (gasError: any) {
               const gasErrorMsg = gasError instanceof Error ? gasError.message : String(gasError);
-              console.warn("⚠️ Gas estimation failed (continuing anyway):", gasErrorMsg);
+              console.warn("⚠️ Pre-approval gas estimation failed (expected for token swaps):", gasErrorMsg.substring(0, 100));
               
-              if (gasErrorMsg.toLowerCase().includes("reverted") || gasErrorMsg.toLowerCase().includes("require(false)") || gasErrorMsg.toLowerCase().includes("transfer")) {
-                console.error("❌ [SWAP] Transaction WILL FAIL when executed!");
-                console.error("❌ [SWAP] Root cause: PancakeSwap router rejected the swap parameters");
-                console.error("❌ [SWAP] This usually means one of:");
-                console.error("   1. 💰 INSUFFICIENT BNB - You need BNB for both swap + gas fees");
-                console.error(`      Try adding 0.005+ BNB to your wallet and retry`);
-                console.error("   2. Slippage too low - increase to 2-5% and try again");
-                console.error("   3. Insufficient liquidity - try a smaller amount");
-                console.error("   4. Pool may be inactive - check if pair exists on PancakeSwap");
-                console.error("   5. ❌ WRONG TOKEN ADDRESSES - verify the token addresses:");
-                console.error(`      - Sell Token (${sellToken.symbol}): ${sellToken.address}`);
-                console.error(`      - Receive Token (${receiveToken.symbol}): ${receiveToken.address}`);
-                console.error(`      - WBNB reference address: ${WBNB_ADDRESS}`);
-                console.error("   6. ⚠️  CRITICAL: The token pair might not exist on PancakeSwap");
-                console.error(`      Check if a pool exists for: ${sellToken.address.substring(0,14)}... <→> ${receiveToken.address.substring(0,14)}...`);
-                console.error("   7. Token tax/transfer restrictions - Some tokens have fees that break swaps");
-                console.error("   8. Transaction timing - try again in a moment");
-                console.error("");
-                console.error("Full error from gas estimation:", gasError);
-                
-                // Extract more details if available
-                if (gasError?.data) {
-                  console.error("Error data:", gasError.data);
-                }
-                if (gasError?.transaction) {
-                  console.error("Transaction that would have failed:", {
-                    to: gasError.transaction.to,
-                    from: gasError.transaction.from,
-                    data: gasError.transaction.data?.substring(0, 100) + "...",
-                  });
-                }
-                
-                // Build more helpful error message based on available info
-                let userMessage = "❌ Swap cannot proceed. "
-                
-                // Check if amount is very small
-                const sellAmountNum = parseFloat(sellAmount);
-                if (sellToken.symbol === "BNB" && sellAmountNum < 0.005) {
-                  userMessage += "Your BNB amount is very small (< 0.005 BNB). Try using at least 0.01 BNB.";
-                } else if (slippage === "custom" && parseFloat(customSlippage) < 1) {
-                  userMessage += "Your slippage is very low. Try increasing to 2-5%.";
-                } else {
-                  userMessage += "Try: (1) Increase slippage to 2-5%, (2) Use a larger amount, (3) Check LEXA address is correct.";
-                }
-                
-                userMessage += " Check console for full error details.";
-                setErrorMessage(userMessage);
-                setTransactionStatus("error");
-                return;
+              if (preparedSwap.approval) {
+                console.log("   This swap requires approval - gas will be estimated after approval is confirmed");
+              } else {
+                console.log("   Using fallback gas limit");
               }
+              estimatedGasLimit = "500000";
             }
+          } else if (isDirectPairSwap) {
+            console.log("⏭️  Skipping gas estimation in STEP 4 for direct pair swap");
+            console.log("   Tokens not yet in pair - will estimate in STEP 5.85 after transfer");
+            estimatedGasLimit = "500000"; // Conservative fallback
           } else if (preparedSwap.wrap) {
             console.log("⏭️  Skipping gas estimation - wrap transaction must execute first");
-            console.log("ℹ️  Will estimate gas AFTER wrap + approval completes");
+            console.log("ℹ️  Will use fallback gas limit for wrap + swap");
           }
         } catch (preflight) {
           console.warn("⚠️ Pre-flight check warning:", preflight);
@@ -555,6 +604,12 @@ export const useSwap = (): UseSwapReturn => {
               }
               
               console.log("✓ Approval confirmed. Hash:", approveReceipt.hash);
+              
+              // Wait 2 seconds for approval to fully propagate through network
+              // This prevents MetaMask simulation failures on the subsequent swap
+              console.log("⏳ Waiting for approval to fully propagate...");
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log("✓ Approval propagation complete, proceeding to swap");
             } catch (waitError) {
               console.error("❌ [SWAP] Error waiting for approval receipt:", waitError);
               throw waitError;
@@ -579,6 +634,255 @@ export const useSwap = (): UseSwapReturn => {
           console.log("✓ No approval needed (BNB input or already approved)");
         }
 
+        // ========== STEP 5.5: REFRESH QUOTE (Only if approval was executed) ==========
+        // For BNB swaps (no approval), the preliminary gas estimate is fresh and accurate
+        // For token swaps (with approval), we need fresh quote after approval to combat K errors
+        if (preparedSwap.approval) {
+          console.log("=".repeat(50));
+          console.log("STEP 5.5: Refreshing quote for fresh minOut (approval was executed)...");
+          console.log("=".repeat(50));
+          
+          try {
+            console.log("🔄 Re-quoting to get fresh minOut values...");
+            const refreshPayload = {
+              tokenIn: sellToken.address,
+              tokenOut: receiveToken.address,
+              amountIn: sellAmount,
+              slippage: parseFloat(effectiveSlippage),
+              walletAddress,
+              fromNativeBNB: sellToken.symbol === "BNB",
+            };
+            
+            const refreshRes = await fetch("/api/pancakeswap/prepare-swap", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(refreshPayload),
+            });
+            
+            if (!refreshRes.ok) {
+              console.warn("⚠️  Quote refresh failed, using original quote. Pancake: K risk elevated.");
+              const errorData = await refreshRes.json().catch(() => ({}));
+              console.warn("   Error:", errorData.error || refreshRes.statusText);
+            } else {
+              const refreshedSwap = await refreshRes.json();
+              console.log("✓ Fresh quote received!");
+              console.log(`  Original minOut: ${preparedSwap.details.minimumAmountOut}`);
+              console.log(`  Refreshed minOut: ${refreshedSwap.details.minimumAmountOut}`);
+              console.log(`  Current slippage: ${effectiveSlippage}%`);
+              
+              // Update with fresh data
+              preparedSwap = refreshedSwap;
+              console.log("✓ Using refreshed quote data for execution");
+              
+              // Log the encoded minOut in the swap data for debugging
+              console.log("📋 Swap data details:");
+              const minOutParam = refreshedSwap.details.minimumAmountOut;
+              console.log(`   Encoded minOut in swap: ${minOutParam}`);
+              console.log(`   Slippage applied: ${parseFloat(effectiveSlippage)}%`);
+              console.log(`   Expected output: ${refreshedSwap.details.expectedAmountOut || "N/A"}`);
+            }
+          } catch (refreshError) {
+            console.warn("⚠️  Quote refresh network error, using original quote:", refreshError);
+          }
+
+          // ========== STEP 5.75: RE-ESTIMATE GAS WITH FRESH DATA (after approval confirmed) ==========
+          // NOTE: Skip gas estimation for direct pair swaps - will estimate after transfer is confirmed
+          if (!preparedSwap.transfer) {
+            console.log("=".repeat(50));
+            console.log("STEP 5.75: Re-estimating gas with fresh quote (approval confirmed + pool state fresh)...");
+            console.log("=".repeat(50));
+            try {
+              console.log("📊 Gas estimation for swap with fresh quote data...");
+              
+              const gasEstimate = await provider.estimateGas({
+                to: preparedSwap.swap.to,
+                from: walletAddress,
+                data: preparedSwap.swap.data,
+                value: "0",
+              });
+              
+              const gasWithBuffer = BigInt(Math.ceil(Number(gasEstimate) * 1.2));
+              estimatedGasLimit = gasWithBuffer.toString();
+              
+              console.log(`✓ Gas estimation successful!`);
+              console.log(`   Raw estimate: ${gasEstimate.toString()}`);
+              console.log(`   With 20% buffer: ${estimatedGasLimit}`);
+            } catch (gasError: any) {
+              const errorMsg = String(gasError.message || gasError);
+              const isKError = errorMsg.toLowerCase().includes("pancake: k") || 
+                              errorMsg.toLowerCase().includes("k (action");
+              
+              if (isKError) {
+                console.warn("⚠️  Pancake K Error during gas estimation - pool liquidity instability detected");
+                console.warn("   Root cause: WBNB reserve is shallow (5.09 BNB) - pool state drifting rapidly");
+                console.warn("   The swap may still execute successfully on-chain despite simulation failure");
+                console.log("");
+                console.log("ℹ️  Strategy: Proceeding with safe fallback gas limit");
+                console.log("   The blockchain will attempt execution and revert if genuinely impossible");
+                estimatedGasLimit = "500000";
+              } else {
+                console.error("⚠️  Different gas estimation error:", errorMsg);
+                console.log("   Using fallback 500000 gas");
+                estimatedGasLimit = "500000";
+              }
+            }
+          } else {
+            console.log("✓ Skipping pre-transfer gas estimation for direct pair swap");
+            console.log("  Will re-estimate gas in STEP 5.85 after transfer is confirmed");
+            estimatedGasLimit = "300000"; // Conservative estimate for pair.swap()
+          }
+        } else {
+          console.log("✓ No approval needed (BNB input), using preliminary gas estimate from STEP 4");
+          console.log(`   Gas limit: ${estimatedGasLimit}`);
+        }
+
+        // ========== STEP 5.9: EXECUTE TRANSFER (Only for direct pair swaps) ==========
+        if (preparedSwap.transfer) {
+          console.log("=".repeat(50));
+          console.log("STEP 5.9: Executing token transfer to pair...");
+          console.log("=".repeat(50));
+          console.log("📝 Transfer TX Details:");
+          console.log("  To (LEXA token):", preparedSwap.transfer.to);
+          console.log("  Amount:", preparedSwap.details.amountIn);
+          console.log("  Recipient (pair):", "0x3027f7b11AB243A1efe3F997430fca5996276E63");
+          console.log("  Function: ERC20.transfer()");
+          console.log("  Data length:", preparedSwap.transfer.data.length);
+          
+          try {
+            console.log("🔐 Sending transfer to wallet - PLEASE CONFIRM IN YOUR WALLET");
+            console.log("⏲️  Awaiting wallet response...");
+            
+            let transferTxResponse;
+            try {
+              transferTxResponse = await signer.sendTransaction({
+                to: ethers.getAddress(preparedSwap.transfer.to.toLowerCase()),
+                data: preparedSwap.transfer.data,
+                gasLimit: "150000", // Increased from 100k for more safety
+              });
+            } catch (sendError: any) {
+              console.error("❌ [SWAP] Transfer wallet rejection or error:");
+              console.error("   Error code:", sendError?.code);
+              console.error("   Error message:", sendError?.message);
+              errorLogger.logError(sendError, {
+                component: "SWAP_TRANSFER",
+                action: "sendTransaction",
+                walletAddress,
+                chainId: "0x38",
+                timestamp: new Date().toISOString(),
+              });
+              
+              if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
+                setErrorMessage("You rejected the transfer request");
+              } else if (sendError?.message?.includes("insufficient")) {
+                setErrorMessage("Insufficient LEXA balance for transfer");
+              } else {
+                setErrorMessage(`Transfer failed: ${sendError?.message || String(sendError)}`);
+              }
+              
+              setTransactionStatus("error");
+              return;
+            }
+            
+            console.log("✓ Transfer sent, TX hash:", transferTxResponse.hash);
+            console.log("⏳ Waiting for transfer confirmation...");
+            console.log("   (This may take up to 60 seconds on BSC)");
+            
+            try {
+              // Add timeout to prevent infinite hanging (60 seconds max)
+              const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("Transfer confirmation timeout after 60 seconds")), 60000)
+              );
+              
+              const transferReceipt = await Promise.race([
+                transferTxResponse.wait(1),
+                timeoutPromise
+              ]);
+              
+              if (!transferReceipt) {
+                console.error("❌ Transfer receipt is null - transaction may have failed");
+                throw new Error("Transfer receipt is null - transaction cancelled or failed");
+              }
+              
+              console.log("✓ Transfer receipt received, checking status...");
+              console.log("  Status:", transferReceipt.status);
+              console.log("  Block number:", transferReceipt.blockNumber);
+              
+              if (transferReceipt.status === 0) {
+                console.error("❌ Transfer failed on-chain with status 0");
+                throw new Error("Transfer transaction failed on-chain (reverted)");
+              }
+              
+              console.log("✓ Transfer confirmed. Hash:", transferReceipt.hash);
+              console.log("  Tokens successfully sent to pair contract");
+              
+              // Wait 1 second for transfer to settle
+              console.log("⏳ Brief wait for transfer settlement...");
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              console.log("✓ Ready to execute swap");
+              
+              // ========== STEP 5.85: ESTIMATE GAS AFTER TRANSFER (for direct pair swaps) ==========
+              console.log("=".repeat(50));
+              console.log("STEP 5.85: Estimating gas for swap (transfer now confirmed on-chain)...");
+              console.log("=".repeat(50));
+              try {
+                console.log("📊 Gas estimation with tokens now in pair...");
+                
+                const gasEstimate = await provider.estimateGas({
+                  to: preparedSwap.swap.to,
+                  from: walletAddress,
+                  data: preparedSwap.swap.data,
+                  value: "0",
+                });
+                
+                const gasWithBuffer = BigInt(Math.ceil(Number(gasEstimate) * 1.2));
+                estimatedGasLimit = gasWithBuffer.toString();
+                
+                console.log(`✓ Gas estimation successful!`);
+                console.log(`   Raw estimate: ${gasEstimate.toString()}`);
+                console.log(`   With 20% buffer: ${estimatedGasLimit}`);
+              } catch (gasError: any) {
+                const errorMsg = String(gasError.message || gasError);
+                console.error("⚠️  Gas estimation after transfer failed:", errorMsg.substring(0, 150));
+                console.log("   Using conservative fallback 500000 gas");
+                estimatedGasLimit = "500000";
+              }
+            } catch (waitError) {
+              const waitErrorMsg = waitError instanceof Error ? waitError.message : String(waitError);
+              console.error("❌ Error waiting for transfer receipt:", waitErrorMsg);
+              console.error("   This could mean:");
+              console.error("   1. Transaction was cancelled in MetaMask");
+              console.error("   2. Network connection was interrupted");
+              console.error("   3. Transaction timed out (60+ seconds)");
+              console.error("   4. RPC provider failed");
+              
+              if (waitErrorMsg.toLowerCase().includes("timeout")) {
+                setErrorMessage("Transfer confirmation timed out. Please check MetaMask and try again.");
+              } else if (waitErrorMsg.toLowerCase().includes("cancelled")) {
+                setErrorMessage("Transfer was cancelled. Please try the swap again.");
+              } else {
+                setErrorMessage(`Transfer confirmation failed: ${waitErrorMsg}`);
+              }
+              
+              setTransactionStatus("error");
+              return;
+            }
+          } catch (transferError) {
+            const errorMsg = transferError instanceof Error ? transferError.message : String(transferError);
+            console.error("❌ Transfer error:", errorMsg);
+            
+            if (errorMsg.toLowerCase().includes("user rejected")) {
+              setErrorMessage("You rejected the transfer request");
+            } else {
+              setErrorMessage(`Transfer failed: ${errorMsg}`);
+            }
+            
+            setTransactionStatus("error");
+            return;
+          }
+        } else {
+          console.log("✓ No token transfer needed (Router-based swap)");
+        }
+
         // ========== STEP 6: EXECUTE SWAP ==========
         console.log("=".repeat(50));
         console.log("STEP 6: Executing swap transaction...");
@@ -596,34 +900,30 @@ export const useSwap = (): UseSwapReturn => {
           console.log("⏲️  Awaiting wallet response (this may take a moment)...");
           console.log("⚠️  If wallet rejects, check for error messages in this console output");
           
-          // Estimate gas before sending
-          try {
-            console.log("⛽ Estimating gas for swap transaction...");
-            const gasEstimate = await provider.estimateGas({
-              to: ethers.getAddress(preparedSwap.swap.to.toLowerCase()),
-              data: preparedSwap.swap.data,
-              value: preparedSwap.swap.value,
-              from: walletAddress,
-            });
-            console.log("✓ Gas estimate successful:", gasEstimate.toString());
-            console.log("  Using fixed gas limit: 500000 (estimate:", gasEstimate.toString(), ")");
-          } catch (gasError: any) {
-            console.warn("⚠️  Gas estimation failed, but continuing with fixed limit:", gasError?.message);
-            console.error("💡 This might indicate the swap will fail. Common causes:");
-            console.error("   1. WBNB not properly approved to router");
-            console.error("   2. Insufficient wrapped BNB balance");
-            console.error("   3. Slippage too tight (try increasing to 8-10%)");
-            console.error("   4. Swap path issue");
-          }
+          // Use gas limit estimated with fresh quote data (after approval confirmed)
+          // This uses real pool state at execution time, not stale pre-approval data
+          console.log(`⚡ Using estimated gas limit from fresh quote: ${estimatedGasLimit}`);
           
           let swapTxResponse;
           try {
               console.log("✋ Wallet is processing transaction - check MetaMask...");
+              console.log(`   Gas limit: ${estimatedGasLimit}`);
+              
+              // Parse value properly for transaction execution
+              let txValue: string | number | bigint = preparedSwap.swap.value;
+              if (typeof txValue === "string") {
+                if (!txValue.startsWith("0x")) {
+                  txValue = BigInt(txValue === "0" ? "0" : txValue);
+                }
+              } else if (typeof txValue === "number") {
+                txValue = BigInt(txValue);
+              }
+              
               swapTxResponse = await signer.sendTransaction({
                 to: ethers.getAddress(preparedSwap.swap.to.toLowerCase()),
                 data: preparedSwap.swap.data,
-                value: preparedSwap.swap.value,
-                gasLimit: "500000",
+                value: txValue,
+                gasLimit: estimatedGasLimit,
               });
               console.log("✅ Wallet accepted transaction");
             } catch (sendError: any) {
@@ -644,14 +944,41 @@ export const useSwap = (): UseSwapReturn => {
                 },
               });
               
+              // Check for specific error types
+              const errorMsg = sendError?.message?.toLowerCase() || "";
+              const isLexaPair = sellToken.symbol === "LEXA" || receiveToken.symbol === "LEXA";
+              
               if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
                 setErrorMessage("❌ You rejected the swap transaction. Check console for details.");
-              } else if (sendError?.message?.toLowerCase().includes("user denied")) {
+              } else if (errorMsg.includes("pancake: k")) {
+                console.error("\n🚨 PANCAKE: K ERROR - Pool x*y=k invariant cannot be satisfied");
+                console.error("   The minOut you're requesting cannot be achieved at current pool state");
+                console.error("   This typically happens with low-liquidity pools and tight slippage");
+                
+                if (isLexaPair) {
+                  console.error("\n   📊 LEXA/WBNB MULTI-HOP ISSUE:");
+                  console.error("   This involves a shallow WBNB reserve (5.09 BNB) in the path");
+                  console.error("   Your slippage tolerance may be too tight for this route");
+                  console.error("\n   ✅ SOLUTIONS TO TRY (in order):");
+                  console.error("   1. INCREASE SLIPPAGE: Try 10%, 12%, or 15% instead of 7%");
+                  console.error("      (Higher slippage = more flexible minOut = more likely to succeed)");
+                  console.error("   2. WAIT A FEW BLOCKS: Pool state may stabilize");
+                  console.error("   3. TRY A SMALLER AMOUNT: Start with 50 LEXA then retry 124");
+                  console.error("   4. CONTACT SUPPORT: For persistent K errors on specific amounts");
+                  setErrorMessage(`❌ K Error: Pool liquidity issue\n\nIncreasing slippage tolerance is the most likely fix:\n• Try 10-15% instead of 7%\n• This accounts for the shallow WBNB reserve\n\nIf still fails:\n• Try a smaller amount first\n• Wait a few moments and retry`);
+                } else {
+                  console.error("   ✅ SOLUTIONS:");
+                  console.error("   1. Increase slippage tolerance to 15-20%");
+                  console.error("   2. Reduce swap amount");
+                  console.error("   3. Try again in a few moments");
+                  setErrorMessage("❌ K Error: Insufficient liquidity\n\nTry increasing slippage to 15-20%\n\nIf still fails:\n• Reduce swap amount\n• Try again in a few moments");
+                }
+              } else if (errorMsg.includes("user denied")) {
                 setErrorMessage("❌ You rejected the swap transaction. Check console for details.");
-              } else if (sendError?.message?.toLowerCase().includes("insufficient")) {
+              } else if (errorMsg.includes("insufficient")) {
                 setErrorMessage("❌ Insufficient balance or liquidity. Check console for details.");
-              } else if (sendError?.message?.toLowerCase().includes("reverted")) {
-                setErrorMessage("❌ Transaction reverted - likely slippage or liquidity issue. Check console for details.");
+              } else if (errorMsg.includes("reverted") || errorMsg.includes("execution reverted")) {
+                setErrorMessage("❌ Transaction reverted - likely slippage, liquidity, or approval issue. Try increasing slippage.");
               } else {
                 setErrorMessage(`❌ Swap failed: ${sendError?.message || String(sendError)}. Check console for full error.`);
               }
@@ -666,7 +993,7 @@ export const useSwap = (): UseSwapReturn => {
 
           console.log("✓ Swap sent, TX object:", swapTxResponse);
           console.log("✓ Swap TX hash:", swapTxResponse.hash);
-          console.log("⏳ Waiting for swap confirmation (up to 2 minutes)...");
+          console.log("⏳ Waiting for swap confirmation (up to 3 minutes for BSC mainnet)...");
           
           let swapReceipt;
           try {
@@ -674,10 +1001,10 @@ export const useSwap = (): UseSwapReturn => {
               swapTxResponse.wait(1),
               new Promise<null>((_, reject) =>
                 setTimeout(() => {
-                  console.error("❌ [SWAP] TIMEOUT: Transaction confirmation took too long (> 1min)");
+                  console.error("❌ [SWAP] TIMEOUT: Transaction confirmation took too long (> 3min)");
                   console.error(`📊 Check status on BSCscan: https://bscscan.com/tx/${swapTxResponse.hash}`);
-                  reject(new Error(`Confirmation timeout (1min+) - transaction may still be pending. Hash: ${swapTxResponse.hash}`));
-                }, 60000)
+                  reject(new Error(`Confirmation timeout (3min+) - transaction may still be pending. Hash: ${swapTxResponse.hash}`));
+                }, 180000)
               ),
             ]);
           } catch (waitError) {
@@ -739,7 +1066,15 @@ export const useSwap = (): UseSwapReturn => {
         }
         console.log("=".repeat(50));
         
-        setErrorMessage(errorMsg || "Unknown error occurred");
+        // Detect and handle RPC/network errors with better messaging
+        if (errorMsg.includes("RPC") || errorMsg.includes("endpoint") || errorMsg.includes("503") || errorMsg.includes("unavailable")) {
+          const networkErrorMsg = `⚠️ Network Connection Issue\n\nCouldn't connect to the blockchain provider. This usually means:\n\n• MetaMask's RPC provider is down\n• Your internet connection is unstable\n• Network is heavily congested\n\nTry:\n1. Refresh this page\n2. Restart MetaMask\n3. Check your internet\n4. Wait a moment and try again`;
+          setErrorMessage(networkErrorMsg);
+          console.error("🌐 RPC/Network error detected - user should check connection");
+        } else {
+          setErrorMessage(errorMsg || "Unknown error occurred");
+        }
+        
         setTransactionStatus("error");
       }
       

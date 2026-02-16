@@ -217,10 +217,21 @@ export async function POST(request: NextRequest) {
     // Convert amountIn to wei
     let amountInWei: bigint;
     try {
-      amountInWei = ethers.parseEther(amountIn);
+      // Ensure amountIn is a string and trim whitespace
+      const amountInStr = String(amountIn).trim();
+      
+      // Validate it's a valid number
+      if (!amountInStr || isNaN(parseFloat(amountInStr))) {
+        throw new Error(`amountIn is not a valid number: "${amountIn}"`);
+      }
+      
+      // Use parseEther to convert to wei
+      amountInWei = ethers.parseEther(amountInStr);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to parse amountIn "${amountIn}":`, errorMsg);
       return NextResponse.json(
-        { error: "Invalid amountIn format" },
+        { error: `Invalid amountIn format: ${errorMsg}` },
         { status: 400 },
       );
     }
