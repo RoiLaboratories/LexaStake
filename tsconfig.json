@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "hardhat.config.cjs", "scripts/deploy.cjs"  ],
   "exclude": ["node_modules"]
 }

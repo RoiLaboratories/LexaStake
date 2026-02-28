@@ -1,0 +1,636 @@
+import { ethers } from "ethers";
+import { TOKENS } from "@/constants/tokens";
+
+// LexaStaking Contract ABI (essential functions only)
+const LEXA_STAKING_ABI = [
+  {
+    inputs: [{ internalType: "address", name: "_lexaToken", type: "address" }],
+    stateMutability: "nonpayable",
+    type: "constructor",
+  },
+  {
+    inputs: [
+      { internalType: "uint256", name: "_amount", type: "uint256" },
+      { internalType: "uint8", name: "_tier", type: "uint8" },
+      { internalType: "uint256", name: "_lockDurationDays", type: "uint256" },
+      { internalType: "address", name: "_referrer", type: "address" },
+    ],
+    name: "stake",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "_stakeIndex", type: "uint256" }],
+    name: "claimRewards",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "_user", type: "address" },
+      { internalType: "uint256", name: "_stakeIndex", type: "uint256" },
+    ],
+    name: "getAccumulatedRewards",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "_stakeIndex", type: "uint256" }],
+    name: "unstake",
+    outputs: [],
+    stateMutability: "nonReentrant",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "address", name: "_user", type: "address" }],
+    name: "getUserStakeCount",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "_user", type: "address" },
+      { internalType: "uint256", name: "_index", type: "uint256" },
+    ],
+    name: "userStakes",
+    outputs: [
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "uint8", name: "tier", type: "uint8" },
+      { internalType: "uint256", name: "lockEndTime", type: "uint256" },
+      { internalType: "uint256", name: "rewardsClaimed", type: "uint256" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint8", name: "_tier", type: "uint8" }],
+    name: "getTierConfig",
+    outputs: [
+      { internalType: "uint256", name: "minStakeAmount", type: "uint256" },
+      { internalType: "uint256", name: "roi90days", type: "uint256" },
+      { internalType: "uint256", name: "roi180days", type: "uint256" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+];
+
+// ERC20 ABI (for LEXA token approval)
+const ERC20_ABI = [
+  {
+    inputs: [
+      { internalType: "address", name: "spender", type: "address" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "approve",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "owner", type: "address" },
+      { internalType: "address", name: "spender", type: "address" },
+    ],
+    name: "allowance",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+];
+
+// Staking tier enum
+export enum StakingTier {
+  BRONZE = 0,
+  SILVER = 1,
+  GOLD = 2,
+}
+
+export interface StakeParams {
+  amount: bigint;
+  tier: StakingTier;
+  durationDays: number;
+  referrer?: string;
+}
+
+class StakingService {
+  // Staking contract address - update this with your deployed contract address
+  private readonly STAKING_CONTRACT_ADDRESS =
+    process.env.NEXT_PUBLIC_STAKING_CONTRACT_ADDRESS ||
+    "0xE9Fd554aF2428Cdce21A437eCf6AaD3FA7B3Da91";
+
+  private readonly LEXA_TOKEN_ADDRESS = TOKENS.LEXA.address;
+
+  /**
+   * Get Alchemy RPC provider for BSC mainnet
+   * On server: Uses private ALCHEMY_API_KEY
+   * On client: Falls back to public RPC endpoint
+   * For client-side read operations, uses /api/staking/rpc endpoint
+   */
+  private getAlchemyProvider(): ethers.JsonRpcProvider {
+    // Try to use private API key (only available on server)
+    const alchemyKey = process.env.ALCHEMY_API_KEY;
+    
+    if (alchemyKey) {
+      const alchemyRpcUrl = `https://bsc-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      console.log("📡 Using Alchemy RPC with private API key (server-side)");
+      return new ethers.JsonRpcProvider(alchemyRpcUrl);
+    }
+
+    // Fallback to public RPC on client-side
+    console.log("⚠️ Using public RPC endpoint (client-side - consider using server actions for better performance)");
+    return new ethers.JsonRpcProvider(
+      process.env.NEXT_PUBLIC_BSC_RPC_URL || "https://bsc.meowrpc.com"
+    );
+  }
+
+  /**
+   * Get ethers signer from Privy wallet
+   * To be called from a component using the usePrivy hook
+   * 
+   * @example
+   * const { user } = usePrivy();
+   * if (user?.wallet?.chainId === 56) {
+   *   const provider = await user.wallet.getEthersProvider();
+   *   const signer = await provider.getSigner();
+   *   // Pass signer to stakingService methods
+   * }
+   */
+
+  /**
+   * Check LEXA token allowance
+   * @param userAddress User wallet address
+   */
+  async checkAllowance(userAddress: string): Promise<bigint> {
+    try {
+      const provider = this.getAlchemyProvider();
+      console.log("🔍 Checking LEXA allowance for:", userAddress);
+
+      const lexaContract = new ethers.Contract(
+        this.LEXA_TOKEN_ADDRESS,
+        ERC20_ABI,
+        provider
+      );
+
+      const allowance = await lexaContract.allowance(
+        userAddress,
+        this.STAKING_CONTRACT_ADDRESS
+      );
+
+      console.log("✓ Allowance:", ethers.formatEther(allowance), "LEXA");
+      return allowance;
+    } catch (error) {
+      console.error("❌ Error checking allowance:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Approve LEXA token for staking
+   * @param amount Amount to approve in wei
+   * @param signer Ethers signer from Privy wallet
+   */
+  async approveToken(
+    amount: bigint,
+    signer: ethers.Signer
+  ): Promise<{ hash: string; status: boolean }> {
+    try {
+      if (!signer) {
+        throw new Error("Signer not available");
+      }
+
+      // Use signer directly for write operations
+      const lexaContract = new ethers.Contract(
+        this.LEXA_TOKEN_ADDRESS,
+        ERC20_ABI,
+        signer
+      );
+
+      console.log(`📤 Approving ${ethers.formatEther(amount)} LEXA for staking contract...`);
+
+      const tx = await lexaContract.approve(
+        this.STAKING_CONTRACT_ADDRESS,
+        amount
+      );
+
+      console.log("✓ Approval transaction sent:", tx.hash);
+
+      console.log("⏳ Waiting for approval confirmation...");
+      const receipt = await tx.wait();
+
+      console.log("✓ Approval confirmed:", receipt);
+
+      return {
+        hash: tx.hash,
+        status: receipt?.status === 1,
+      };
+    } catch (error) {
+      console.error("Error approving token:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stake LEXA tokens
+   * @param params Staking parameters (amount, tier, duration)
+   * @param signer Ethers signer from Privy wallet
+   */
+  async stake(
+    params: StakeParams,
+    signer: ethers.Signer
+  ): Promise<{ hash: string; status: boolean }> {
+    try {
+      if (!signer) {
+        throw new Error("Signer not available");
+      }
+
+      console.log("📝 Creating staking contract instance...");
+      
+      // Use signer directly for write operations
+      // The signer will handle both signing and sending transactions
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        signer
+      );
+
+      // Check and approve if necessary
+      console.log("🔍 Getting user address from signer...");
+      let userAddress: string;
+      try {
+        userAddress = await signer.getAddress();
+        console.log("✓ User address:", userAddress);
+      } catch (addressError) {
+        console.error("❌ Failed to get user address:", addressError);
+        throw new Error(`Could not get wallet address: ${addressError instanceof Error ? addressError.message : String(addressError)}`);
+      }
+
+      console.log("⏳ Checking token allowance...");
+      const currentAllowance = await this.checkAllowance(userAddress);
+      console.log("Current allowance:", ethers.formatEther(currentAllowance), "LEXA");
+
+      if (currentAllowance < params.amount) {
+        console.log("📤 Allowance insufficient, requesting approval...");
+        await this.approveToken(params.amount, signer);
+        console.log("✓ Approval completed");
+      } else {
+        console.log("✓ Sufficient allowance already granted");
+      }
+
+      console.log(
+        `💰 Staking ${ethers.formatEther(params.amount)} LEXA for ${params.durationDays} days at tier ${params.tier}...`
+      );
+
+      const referrer = params.referrer || ethers.ZeroAddress;
+
+      console.log("⏳ Sending stake transaction to blockchain...");
+      const tx = await stakingContract.stake(
+        params.amount,
+        params.tier,
+        params.durationDays,
+        referrer
+      );
+
+      console.log("✓ Stake transaction sent:", tx.hash);
+
+      console.log("⏳ Waiting for transaction confirmation...");
+      const receipt = await tx.wait();
+
+      console.log("✓ Stake confirmed:", receipt);
+
+      return {
+        hash: tx.hash,
+        status: receipt?.status === 1,
+      };
+    } catch (error) {
+      console.error("❌ Error staking:", error);
+      
+      // Provide more helpful error messages
+      if (error instanceof Error) {
+        if (error.message.includes("Failed to fetch")) {
+          throw new Error(
+            "Network error: Unable to connect to blockchain. Please check your internet connection and try again."
+          );
+        }
+        if (error.message.includes("insufficient")) {
+          throw new Error(
+            "Insufficient balance or allowance. Please check your LEXA balance and try again."
+          );
+        }
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Find all stakes with claimable rewards
+   * Useful for debugging stake_index mismatches
+   */
+  async findStakesWithRewards(
+    userAddress: string
+  ): Promise<{ stakeIndex: number; rewards: string }[]> {
+    try {
+      const provider = new ethers.JsonRpcProvider(
+        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+          "https://bsc.meowrpc.com"
+      );
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        provider
+      );
+
+      // Get user's stake count
+      const stakeCount = await stakingContract.getUserStakeCount(userAddress);
+      console.log(`📊 User has ${stakeCount} total stakes`);
+
+      const stakesWithRewards: { stakeIndex: number; rewards: string }[] = [];
+
+      // Check each stake for rewards
+      for (let i = 0; i < stakeCount; i++) {
+        try {
+          const rewards = await stakingContract.getAccumulatedRewards(
+            userAddress,
+            i
+          );
+          const rewardsEther = ethers.formatEther(rewards);
+          console.log(`  Stake ${i}: ${rewardsEther} LEXA`);
+          
+          if (rewards > BigInt(0)) {
+            stakesWithRewards.push({
+              stakeIndex: i,
+              rewards: rewardsEther,
+            });
+          }
+        } catch (err) {
+          console.log(`  Stake ${i}: Error checking (may not exist)`);
+        }
+      }
+
+      console.log(`✅ Found ${stakesWithRewards.length} stake(s) with rewards`);
+      return stakesWithRewards;
+    } catch (error) {
+      console.error("Error finding stakes with rewards:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Claim rewards from a stake
+   * @param stakeIndex Index of the stake
+   * @param signer Ethers signer from Privy wallet
+   * @param userAddress User wallet address (for validation)
+   */
+  async claimRewards(
+    stakeIndex: number,
+    signer: ethers.Signer,
+    userAddress?: string
+  ): Promise<{ hash: string; status: boolean }> {
+    try {
+      if (!signer) {
+        throw new Error("Signer not available");
+      }
+
+      // Get the user's address if not provided
+      const walletAddr = userAddress || (await signer.getAddress());
+
+      // Check and log accumulated rewards (for informational purposes)
+      console.log(`Checking accumulated rewards for stake index ${stakeIndex}...`);
+      try {
+        const accumulatedRewardsStr = await this.getAccumulatedRewards(walletAddr, stakeIndex);
+        const accumulatedRewards = parseFloat(accumulatedRewardsStr);
+        console.log(`Accumulated rewards from contract: ${accumulatedRewardsStr} LEXA`);
+        
+        if (accumulatedRewards <= 0) {
+          console.warn(
+            `⚠️ Contract reports 0 rewards, but attempting claim anyway. ` +
+            `Some contracts may accumulate rewards differently than expected.`
+          );
+        }
+      } catch (rewardsError) {
+        console.warn("Could not fetch accumulated rewards, but attempting claim:", rewardsError);
+      }
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        signer
+      );
+
+      console.log(`Attempting to claim rewards for stake index ${stakeIndex}...`);
+
+      const tx = await stakingContract.claimRewards(stakeIndex);
+
+      console.log("Claim rewards transaction sent:", tx.hash);
+
+      const receipt = await tx.wait();
+
+      console.log("Claim confirmed:", receipt);
+
+      return {
+        hash: tx.hash,
+        status: receipt?.status === 1,
+      };
+    } catch (error) {
+      console.error("Error claiming rewards:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get accumulated rewards for a stake
+   */
+  async getAccumulatedRewards(
+    userAddress: string,
+    stakeIndex: number
+  ): Promise<string> {
+    try {
+      const provider = new ethers.JsonRpcProvider(
+        process.env.NEXT_PUBLIC_BSC_RPC_URL ||
+          "https://bsc.meowrpc.com"
+      );
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        provider
+      );
+
+      const rewards = await stakingContract.getAccumulatedRewards(
+        userAddress,
+        stakeIndex
+      );
+
+      return ethers.formatEther(rewards);
+    } catch (error) {
+      console.error("Error getting accumulated rewards:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unstake tokens
+   * @param stakeIndex Index of the stake
+   * @param signer Ethers signer from Privy wallet
+   */
+  async unstake(
+    stakeIndex: number,
+    signer: ethers.Signer
+  ): Promise<{ hash: string; status: boolean }> {
+    try {
+      if (!signer) {
+        throw new Error("Signer not available");
+      }
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        signer
+      );
+
+      console.log(`Unstaking stake index ${stakeIndex}...`);
+
+      const tx = await stakingContract.unstake(stakeIndex);
+
+      console.log("Unstake transaction sent:", tx.hash);
+
+      const receipt = await tx.wait();
+
+      console.log("Unstake confirmed:", receipt);
+
+      return {
+        hash: tx.hash,
+        status: receipt?.status === 1,
+      };
+    } catch (error) {
+      console.error("Error unstaking:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's stake count
+   * @param userAddress User wallet address
+   */
+  async getUserStakeCount(userAddress: string): Promise<number> {
+    try {
+      // Validate address format
+      if (!userAddress || !userAddress.startsWith("0x") || userAddress.length !== 42) {
+        console.warn(`⚠️ Invalid user address format: ${userAddress}, returning 0`);
+        return 0;
+      }
+
+      const provider = this.getAlchemyProvider();
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        provider
+      );
+
+      console.log(`🔍 Getting stake count for ${userAddress}...`);
+
+      let stakeCount;
+      try {
+        stakeCount = await stakingContract.getUserStakeCount(userAddress);
+      } catch (contractError: any) {
+        // If contract call fails, return 0 instead of crashing
+        // This handles new users or access control issues
+        const errorMsg = contractError?.reason || contractError?.message || String(contractError);
+        console.warn(
+          `⚠️ Contract call failed for getUserStakeCount (might be a new user or access control): ${errorMsg}`
+        );
+        return 0;
+      }
+
+      const count = Number(stakeCount);
+
+      console.log("✓ Stake count:", count);
+      return count;
+    } catch (error) {
+      console.error("❌ Error getting user stake count:", error);
+      // Return 0 for new users instead of throwing
+      return 0;
+    }
+  }
+
+  /**
+   * Get stake details
+   * @param userAddress User wallet address
+   * @param stakeIndex Index of the stake
+   */
+  async getStakeDetails(
+    userAddress: string,
+    stakeIndex: number
+  ): Promise<{
+    amount: string;
+    tier: number;
+    lockEndTime: number;
+    rewardsClaimed: string;
+  }> {
+    try {
+      const provider = this.getAlchemyProvider();
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        provider
+      );
+
+      console.log(`📋 Getting stake details for index ${stakeIndex}...`);
+
+      const stake = await stakingContract.userStakes(userAddress, stakeIndex);
+
+      return {
+        amount: ethers.formatEther(stake.amount),
+        tier: Number(stake.tier),
+        lockEndTime: Number(stake.lockEndTime),
+        rewardsClaimed: ethers.formatEther(stake.rewardsClaimed),
+      };
+    } catch (error) {
+      console.error("❌ Error getting stake details:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get tier configuration from smart contract
+   * @param tierIndex 0 = BRONZE, 1 = SILVER, 2 = GOLD
+   */
+  async getTierConfig(tierIndex: 0 | 1 | 2): Promise<{
+    minStakeAmount: string;
+    roi90days: string;
+    roi180days: string;
+  }> {
+    try {
+      const provider = this.getAlchemyProvider();
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        provider
+      );
+
+      console.log(`⚙️ Getting tier ${tierIndex} configuration...`);
+
+      const tierConfig = await stakingContract.getTierConfig(tierIndex);
+
+      return {
+        minStakeAmount: tierConfig.minStakeAmount.toString(),
+        roi90days: tierConfig.roi90days.toString(),
+        roi180days: tierConfig.roi180days.toString(),
+      };
+    } catch (error) {
+      console.error(`❌ Error getting tier ${tierIndex} config:`, error);
+      throw error;
+    }
+  }
+}
+
+export const stakingService = new StakingService();

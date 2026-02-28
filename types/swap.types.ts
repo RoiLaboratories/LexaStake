@@ -52,6 +52,10 @@ export type UseSwapReturn = {
   prices: { bnb: number; lexa: number };
   errorMessage: string | null;
   transactionHash: string | null;
+  lastTransactionSellAmount: string;
+  lastTransactionReceiveAmount: string;
+  lastTransactionSellToken: Token;
+  lastTransactionReceiveToken: Token;
   
   // Setters
   setSellToken: (token: Token) => void;
@@ -65,6 +69,7 @@ export type UseSwapReturn = {
   swapTokens: () => void;
   handleMaxAmount: () => void;
   handlePercentage: (percentage: number) => void;
+  resetSwapInputs: () => void;
   executeSwap: (walletAddress: string) => Promise<void>;
   resetTransaction: () => void;
   updateBalance: (newBalance: string) => void;

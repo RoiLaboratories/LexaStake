@@ -12,7 +12,9 @@ interface TransactionNotificationProps {
   receiveToken?: string;
   transactionHash?: string;
   onClose: () => void;
+  onRetry?: () => void;
   errorMessage?: string | null;
+  isRetryable?: boolean;
 }
 
 export default function TransactionNotification({
@@ -24,7 +26,9 @@ export default function TransactionNotification({
   receiveToken,
   transactionHash,
   onClose,
+  onRetry,
   errorMessage,
+  isRetryable = false,
 }: TransactionNotificationProps) {
   return (
     <AnimatePresence>
@@ -100,15 +104,20 @@ export default function TransactionNotification({
                     </svg>
                   </div>
                   <h3 className="text-lg font-bold text-white">
-                    Token swap failed!
+                    {isRetryable ? "Transaction Cancelled" : "Transaction failed!"}
                   </h3>
                 </div>
                 <p className="text-gray-300 text-sm mb-4 leading-relaxed whitespace-pre-wrap">
-                  {errorMessage || "An unknown error occurred during the swap"}
+                  {errorMessage || "An unknown error occurred"}
                 </p>
-                <button className="w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors">
-                  Try again
-                </button>
+                {isRetryable && onRetry && (
+                  <button
+                    onClick={onRetry}
+                    className="w-full px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                )}
               </div>
             )}
 
@@ -130,41 +139,36 @@ export default function TransactionNotification({
                     </svg>
                   </div>
                   <h3 className="text-lg font-bold text-white">
-                    Token swapped successfully!
+                    {sellToken && receiveToken ? "Token swapped successfully!" : "Transaction successful!"}
                   </h3>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-3 mb-4 border border-gray-700">
-                  <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-1">
-                    You Sent
-                  </p>
-                  <p className="text-white text-sm font-semibold mb-3">
-                    {sellAmount ? parseFloat(sellAmount).toLocaleString('en-US', { maximumFractionDigits: 8 }) : "0"} {sellToken}
-                  </p>
-                  <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-1">
-                    You Received
-                  </p>
-                  <p className="text-white text-sm font-semibold">
-                    {receiveAmount ? parseFloat(receiveAmount).toLocaleString('en-US', { maximumFractionDigits: 8 }) : "0"} {receiveToken}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 mb-4 text-gray-400 text-sm">
-                  <Image
-                    src="/assets/LexaLogo2.svg"
-                    alt="LEXA"
-                    width={16}
-                    height={16}
-                    className="opacity-70"
-                  />
-                  <span>Via LexaSwap</span>
-                </div>
-                <a
-                  href={`https://bscscan.com/tx/${transactionHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full max-w-50 px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors text-center"
-                >
-                  View transaction
-                </a>
+                {/* Swap Details (if available) */}
+                {sellToken && receiveToken && (
+                  <div className="bg-gray-800 rounded-lg p-3 mb-4 border border-gray-700">
+                    <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-1">
+                      You Sent
+                    </p>
+                    <p className="text-white text-sm font-semibold mb-3">
+                      {sellAmount ? parseFloat(sellAmount).toLocaleString('en-US', { maximumFractionDigits: 8 }) : "0"} {sellToken}
+                    </p>
+                    <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-1">
+                      You Received
+                    </p>
+                    <p className="text-white text-sm font-semibold">
+                      {receiveAmount ? parseFloat(receiveAmount).toLocaleString('en-US', { maximumFractionDigits: 8 }) : "0"} {receiveToken}
+                    </p>
+                  </div>
+                )}
+                {transactionHash && (
+                  <a
+                    href={`https://bscscan.com/tx/${transactionHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block px-5 py-2.5 bg-white text-black rounded-full font-semibold text-sm hover:bg-gray-200 transition-colors"
+                  >
+                    View on BSCScan
+                  </a>
+                )}
               </div>
             )}
           </motion.div>

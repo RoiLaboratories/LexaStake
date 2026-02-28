@@ -1,7 +1,7 @@
 const { ethers } = require("ethers");
 
 async function checkPair() {
-  const rpc = "https://bsc-dataseed1.binance.org";
+  const rpc = "https://bsc.meowrpc.com";
   const provider = new ethers.JsonRpcProvider(rpc, {
     chainId: 56,
     name: "bsc"

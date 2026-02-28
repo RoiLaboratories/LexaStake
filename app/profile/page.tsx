@@ -8,7 +8,34 @@ import StakingTab from "@/components/StakingTab";
 import ReferralsTab from "@/components/ReferralsTab";
 import ActivitiesTab from "@/components/ActivitiesTab";
 import { swapService } from "@/services/swap.service";
+import { supabaseService } from "@/services/supabase.service";
 import { TOKENS } from "@/constants/tokens";
+
+interface StakingHistoryItem {
+  id?: string;
+  user_address: string;
+  stake_index: number;
+  amount: string;
+  tier: "Bronze" | "Silver" | "Gold";
+  lock_period: number;
+  roi_percentage: number;
+  start_time: number;
+  lock_end_time: number;
+  active?: boolean;
+  tx_hash: string;
+  created_at?: string;
+}
+
+interface ActivityItem {
+  id?: string;
+  user_address: string;
+  tx_hash: string;
+  tx_type: "stake" | "unstake" | "claim_rewards" | "restake" | "swap";
+  status?: "pending" | "confirmed" | "failed";
+  amount?: string;
+  details?: Record<string, any>;
+  created_at?: string;
+}
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -26,6 +53,9 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState("staking");
   const [lexaBalance, setLexaBalance] = useState<string | null>(null);
   const [bnbBalance, setBnbBalance] = useState<string | null>(null);
+  const [stakingHistory, setStakingHistory] = useState<StakingHistoryItem[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const { authenticated, user } = usePrivy();
 
   useEffect(() => {
@@ -34,11 +64,16 @@ const Profile = () => {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLexaBalance(null);
       setBnbBalance(null);
+      setStakingHistory([]);
+      setActivities([]);
       return;
     }
 
-    const fetchBalances = async () => {
+    const fetchData = async () => {
       try {
+        setLoading(true);
+
+        // Fetch balances
         const lexaData = await swapService.getWalletBalance(
           addr,
           TOKENS.LEXA.address,
@@ -49,12 +84,22 @@ const Profile = () => {
         );
         setLexaBalance(lexaData.balance);
         setBnbBalance(bnbData.balance);
+
+        // Fetch staking history
+        const stakingData = await supabaseService.getUserStakingHistory(addr);
+        setStakingHistory(stakingData || []);
+
+        // Fetch activities
+        const activitiesData = await supabaseService.getUserTransactions(addr);
+        setActivities(activitiesData || []);
       } catch (error) {
-        console.error("Error fetching balances:", error);
+        console.error("Error fetching profile data:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchBalances();
+    fetchData();
   }, [user, authenticated]);
 
   return (
@@ -205,13 +250,21 @@ const Profile = () => {
           <div>
             <AnimatePresence mode="wait">
               {activeTab === "staking" && (
-                <StakingTab isConnected={authenticated} />
+                <StakingTab
+                  isConnected={authenticated}
+                  stakes={stakingHistory}
+                  loading={loading}
+                />
               )}
               {activeTab === "referrals" && (
                 <ReferralsTab isConnected={authenticated} />
               )}
               {activeTab === "activities" && (
-                <ActivitiesTab isConnected={authenticated} />
+                <ActivitiesTab
+                  isConnected={authenticated}
+                  activities={activities}
+                  loading={loading}
+                />
               )}
             </AnimatePresence>
           </div>

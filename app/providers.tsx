@@ -11,7 +11,7 @@ const BNB_CHAIN_CONFIG = {
     symbol: "BNB",
     decimals: 18,
   },
-  rpcUrls: ["https://bsc-dataseed1.binance.org:443"],
+  rpcUrls: ["https://bsc.meowrpc.com"],
   blockExplorerUrls: ["https://bscscan.com"],
 };
 

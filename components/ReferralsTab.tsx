@@ -7,32 +7,8 @@ interface ReferralsTabProps {
 }
 
 const ReferralsTab = ({ isConnected }: ReferralsTabProps) => {
-  // Mock data when wallet is connected
-  const referrals = isConnected
-    ? [
-        {
-          address: "0xgjsjdhdjcuishbhzxbdads",
-          reward: "50 LEXA",
-          action: "Stake",
-          status: "Active",
-          claim: true,
-        },
-        {
-          address: "0xgjsjdhdjcuishbhzxbdads",
-          reward: "0.005 BNB",
-          action: "LEXA Buy",
-          status: "Successful",
-          claim: true,
-        },
-        {
-          address: "0xgjsjdhdjcuishbhzxbdads",
-          reward: "0.003 BNB",
-          action: "LEXA Buy",
-          status: "Successful",
-          claim: true,
-        },
-      ]
-    : [];
+  // TODO: Implement referral data fetching when referral tracking is added
+  const referrals: any[] = [];
 
   return (
     <motion.div
@@ -199,7 +175,7 @@ const ReferralsTab = ({ isConnected }: ReferralsTabProps) => {
           <p className="text-gray-400 text-center text-sm sm:text-base">
             {isConnected
               ? "Invite friends with your referral link to view your referrals"
-              : "Connect wallet with stakes to view your stakes"}
+              : "Connect wallet with referrals to view your referrals"}
           </p>
         </motion.div>
       )}

@@ -16,6 +16,13 @@ export const TOKENS: Record<string, Token> = {
     // Use wrapped BNB (WBNB) on BSC mainnet for ERC20 balance queries
     address: "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c",
   },
+  BUSD: {
+    symbol: "BUSD",
+    name: "Binance USD",
+    logoPath: "/assets/busd.svg",
+    decimals: 18,
+    address: "0xe9e7cea3dedca5984780bafc599bd69add087d56",
+  },
   // Add more tokens as needed
 };
 

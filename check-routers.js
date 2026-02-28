@@ -1,7 +1,7 @@
 const { ethers } = require("ethers");
 
 async function checkRouters() {
-  const rpc = "https://bsc-dataseed1.binance.org";
+  const rpc = "https://bsc.meowrpc.com";
   const provider = new ethers.JsonRpcProvider(rpc);
 
   const ROUTER_V2 = "0x10ED43C718714eb63d5aA57B78B54704E256024E";

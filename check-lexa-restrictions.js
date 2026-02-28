@@ -1,7 +1,7 @@
 const { ethers } = require("ethers");
 
 async function checkLEXARestrictions() {
-  const rpc = "https://bsc-dataseed1.binance.org";
+  const rpc = "https://bsc.meowrpc.com";
   const provider = new ethers.JsonRpcProvider(rpc);
   
   const LEXA_ADDRESS = "0x6fc20e595a8704725dbd160e7c799665706e0bdd";

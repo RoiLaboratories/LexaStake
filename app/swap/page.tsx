@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { Settings, ArrowDownUp } from "lucide-react";
+import { Settings, ArrowDownUp, RefreshCw } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 
 import { swapService } from "@/services/swap.service";
@@ -74,6 +74,10 @@ export default function SwapPage() {
     prices,
     errorMessage,
     transactionHash,
+    lastTransactionSellAmount,
+    lastTransactionReceiveAmount,
+    lastTransactionSellToken,
+    lastTransactionReceiveToken,
     setSellAmount,
     setReceiveAmount,
     setSlippage,
@@ -81,6 +85,7 @@ export default function SwapPage() {
     swapTokens,
     handleMaxAmount,
     handlePercentage,
+    resetSwapInputs,
     executeSwap,
     resetTransaction,
     updateBalance,
@@ -157,7 +162,7 @@ export default function SwapPage() {
                         symbol: "BNB",
                         decimals: 18,
                       },
-                      rpcUrls: ["https://bsc-dataseed1.binance.org:443"],
+                      rpcUrls: ["https://bsc.meowrpc.com"],
                       blockExplorerUrls: ["https://bscscan.com"],
                     },
                   ],
@@ -276,14 +281,14 @@ export default function SwapPage() {
     console.log("Modal becoming active, showing");
     setShowNotification(true);
 
-    // Auto-hide success/error after 5 seconds
+    // Auto-hide success/error after 8 seconds
     if (transactionStatus === "success" || transactionStatus === "error") {
-      console.log("Setting 5s timer to auto-close modal");
+      console.log("Setting 8s timer to auto-close modal");
       const timer = setTimeout(() => {
-        console.log("5s timer fired, closing modal and resetting");
+        console.log("8s timer fired, closing modal and resetting");
         setShowNotification(false);
         resetTransaction();
-      }, 5000);
+      }, 8000);
       return () => clearTimeout(timer);
     }
 
@@ -314,6 +319,14 @@ export default function SwapPage() {
       receiveToken: receiveToken.symbol,
       slippage: slippage === "custom" ? customSlippage : slippage,
     });
+
+    // Check if trying to swap LEXA to BNB (currently disabled)
+    if (sellToken.symbol === "LEXA" && receiveToken.symbol === "BNB") {
+      console.warn("⚠️ [SWAP_PAGE] LEXA to BNB swaps are currently disabled");
+      console.warn("   We're working on optimizing this route - check back soon!");
+      alert("⚠️ LEXA to BNB swaps are currently disabled.\nWe're working on optimizing this route - check back soon!");
+      return;
+    }
 
     if (!walletAddress) {
       console.error("❌ [SWAP_PAGE] Wallet address is not set!");
@@ -379,10 +392,13 @@ export default function SwapPage() {
     resetTransaction();
   };
 
+  const isLexaToBNBSwap = sellToken.symbol === "LEXA" && receiveToken.symbol === "BNB";
+
   const isSwapDisabled =
     !sellAmount ||
     parseFloat(sellAmount) === 0 ||
-    transactionStatus === "loading";
+    transactionStatus === "loading" ||
+    isLexaToBNBSwap;
 
   return (
     <>
@@ -426,10 +442,10 @@ export default function SwapPage() {
       <TransactionNotification
         isVisible={showNotification}
         status={transactionStatus}
-        sellAmount={sellAmount}
-        sellToken={sellToken.symbol}
-        receiveAmount={receiveAmount}
-        receiveToken={receiveToken.symbol}
+        sellAmount={lastTransactionSellAmount}
+        sellToken={lastTransactionSellToken.symbol}
+        receiveAmount={lastTransactionReceiveAmount}
+        receiveToken={lastTransactionReceiveToken.symbol}
         transactionHash={transactionHash || undefined}
         onClose={closeNotification}
         errorMessage={errorMessage}
@@ -455,12 +471,21 @@ export default function SwapPage() {
             {/* Header */}
             <div className="flex justify-between items-center mb-6 sm:mb-8">
               <h2 className="text-xl sm:text-2xl font-bold text-white">Swap Tokens</h2>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
-              >
-                <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={resetSwapInputs}
+                  className="p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
+                  title="Reset inputs"
+                >
+                  <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
+                >
+                  <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+                </button>
+              </div>
             </div>
 
             {/* Sell Section */}
@@ -558,7 +583,11 @@ export default function SwapPage() {
                       : "bg-yellow-600 text-black cursor-not-allowed opacity-70"
                   }`}
                 >
-                  {transactionStatus === "loading" ? "Processing..." : "Swap"}
+                  {transactionStatus === "loading"
+                    ? "Processing..."
+                    : isLexaToBNBSwap
+                    ? "Coming Soon..."
+                    : "Swap"}
                 </button>
               )}
             </div>

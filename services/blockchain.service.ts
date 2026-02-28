@@ -3,14 +3,13 @@ import { TOKENS } from "@/constants/tokens";
 
 // Fallback RPC endpoints for balance fetching (no Alchemy by default)
 const BSC_RPC_URLS = [
+  "https://bsc.meowrpc.com",
+  "https://bsc.publicnode.com",
+  "https://endpoints.omnirpc.io/bsc",
   "https://bsc-dataseed1.binance.org",
   "https://bsc-dataseed2.binance.org",
   "https://bsc-dataseed3.binance.org",
   "https://bsc-dataseed4.binance.org",
-  "https://bsc.publicnode.com",
-  "https://rpc.ankr.com/bsc",
-  "https://bsc.meowrpc.com",
-  "https://endpoints.omnirpc.io/bsc",
 ];
 
 // Alchemy endpoint as final fallback for balance fetching

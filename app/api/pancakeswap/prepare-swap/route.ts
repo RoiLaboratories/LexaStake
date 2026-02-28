@@ -25,10 +25,10 @@ const BSC_RPC_URLS = (() => {
   
   // Add fallback public endpoints
   urls.push(
-    "https://bsc-dataseed1.binance.org",
-    "https://bsc-dataseed2.binance.org",
+    "https://bsc.meowrpc.com",
     "https://bsc.publicnode.com",
-    "https://rpc.ankr.com/bsc",
+    "https://endpoints.omnirpc.io/bsc",
+    "https://bsc-dataseed1.binance.org",
   );
   
   return urls;

@@ -27,12 +27,20 @@ export const useSwap = (): UseSwapReturn => {
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
+  const [lastTransactionSellAmount, setLastTransactionSellAmount] = useState<string>("");
+  const [lastTransactionReceiveAmount, setLastTransactionReceiveAmount] = useState<string>("");
+  const [lastTransactionSellToken, setLastTransactionSellToken] = useState<Token>(TOKENS.LEXA);
+  const [lastTransactionReceiveToken, setLastTransactionReceiveToken] = useState<Token>(TOKENS.BNB);
 
   // Fetch quote when amounts or tokens change
   useEffect(() => {
     const fetchQuote = async () => {
       if (!sellAmount || parseFloat(sellAmount) === 0) {
-        setReceiveAmount("");
+        // Only clear receive amount if we're not in the middle of a transaction
+        // This preserves the received amount for the notification display
+        if (transactionStatus === "idle") {
+          setReceiveAmount("");
+        }
         setQuote(null);
         return;
       }
@@ -81,7 +89,7 @@ export const useSwap = (): UseSwapReturn => {
 
     const debounceTimer = setTimeout(fetchQuote, 500);
     return () => clearTimeout(debounceTimer);
-  }, [sellAmount, sellToken, receiveToken, slippage, customSlippage]);
+  }, [sellAmount, sellToken, receiveToken, slippage, customSlippage, transactionStatus]);
 
   // Fetch prices on mount and periodically
   useEffect(() => {
@@ -121,6 +129,13 @@ export const useSwap = (): UseSwapReturn => {
     },
     [balance],
   );
+
+  const resetSwapInputs = useCallback(() => {
+    console.log("🔄 Resetting swap inputs");
+    setSellAmount("");
+    setReceiveAmount("");
+    setQuote(null);
+  }, []);
 
   const executeSwap = useCallback(
     async (walletAddress: string) => {
@@ -1033,6 +1048,14 @@ export const useSwap = (): UseSwapReturn => {
           
           console.log("✓✓ SWAP SUCCESSFUL! TX Hash:", swapReceipt.hash);
           console.log(`⏱️  [SWAP] Total execution time: ${Date.now() - executionStartTime}ms`);
+          
+          // Store transaction amounts before clearing for display in notification
+          // Use the actual minimum amount from the swap preparation, not the form state
+          setLastTransactionSellAmount(sellAmount);
+          setLastTransactionReceiveAmount(preparedSwap.details?.minimumAmountOut || receiveAmount || "0");
+          setLastTransactionSellToken(sellToken);
+          setLastTransactionReceiveToken(receiveToken);
+          
           setTransactionHash(swapReceipt.hash);
           setTransactionStatus("success");
           setSellAmount("");
@@ -1088,6 +1111,8 @@ export const useSwap = (): UseSwapReturn => {
   const resetTransaction = useCallback(() => {
     setTransactionStatus("idle");
     setErrorMessage(null);
+    setLastTransactionSellAmount("");
+    setLastTransactionReceiveAmount("");
   }, []);
 
   const updateBalance = useCallback((newBalance: string) => {
@@ -1109,6 +1134,10 @@ export const useSwap = (): UseSwapReturn => {
     prices,
     errorMessage,
     transactionHash,
+    lastTransactionSellAmount,
+    lastTransactionReceiveAmount,
+    lastTransactionSellToken,
+    lastTransactionReceiveToken,
 
     // Actions
     setSellToken,
@@ -1120,6 +1149,7 @@ export const useSwap = (): UseSwapReturn => {
     swapTokens,
     handleMaxAmount,
     handlePercentage,
+    resetSwapInputs,
     executeSwap,
     resetTransaction,
     updateBalance,

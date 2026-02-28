@@ -2,10 +2,7 @@
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
-import { useEffect, useState } from "react";
 import { usePrivy, User } from "@privy-io/react-auth";
-import { swapService } from "@/services/swap.service";
-import { TOKENS } from "@/constants/tokens";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -22,27 +19,6 @@ function extractWalletAddress(user: User | null): string | null {
 export default function StakePage() {
   const router = useRouter();
   const { authenticated, user } = usePrivy();
-  const [lexaBalance, setLexaBalance] = useState<string | null>(null);
-
-  useEffect(() => {
-    const addr = extractWalletAddress(user);
-    if (!addr || !authenticated) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLexaBalance(null);
-      return;
-    }
-
-    const fetchLexaBalance = async () => {
-      try {
-        const lexaData = await swapService.getWalletBalance(addr, TOKENS.LEXA.address);
-        setLexaBalance(lexaData.balance);
-      } catch (error) {
-        console.error("Error fetching LEXA balance:", error);
-      }
-    };
-
-    fetchLexaBalance();
-  }, [user, authenticated]);
 
   const tiers = [
     {
@@ -107,32 +83,26 @@ export default function StakePage() {
                     Minimum Stake
                   </p>
 
-                  {lexaBalance !== null && (
-                    <p className="text-yellow-400 text-xs sm:text-sm mb-2 font-semibold">
-                      Your LEXA: {parseFloat(lexaBalance).toLocaleString()}
-                    </p>
-                  )}
-
                   <div className="text-center mb-4 sm:mb-5">
                     <p className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white">
                       {tier.minStake}
                     </p>
                     {tier.token && (
-                      <p className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-white mt-1 sm:mt-2 tracking-[0.2em]">
-                        {tier.token}
-                      </p>
-                    )}
-                  </div>
+                        <p className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-white mt-1 sm:mt-2 tracking-[0.2em]">
+                          {tier.token}
+                        </p>
+                      )}
+                    </div>
 
-                  <button
-                    onClick={() => handleStakeClick(tier.id)}
-                    className="w-full max-w-40 px-6 py-2.5 sm:py-3 bg-yellow-500 text-black rounded-md font-bold text-sm sm:text-base hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
-                  >
-                    Stake
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    <button
+                      onClick={() => handleStakeClick(tier.id)}
+                      className="w-full max-w-40 px-6 py-2.5 sm:py-3 bg-yellow-500 text-black rounded-md font-bold text-sm sm:text-base hover:bg-yellow-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-yellow-500/50 cursor-pointer"
+                    >
+                      Stake
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
           </div>
         </div>
       </main>

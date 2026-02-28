@@ -2,32 +2,57 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 
-interface ActivitiesTabProps {
-  isConnected: boolean;
+interface ActivityItem {
+  id?: string;
+  user_address: string;
+  tx_hash: string;
+  tx_type: "stake" | "unstake" | "claim_rewards" | "restake" | "swap";
+  status?: "pending" | "confirmed" | "failed";
+  amount?: string;
+  details?: Record<string, any>;
+  created_at?: string;
 }
 
-const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
-  // Mock data when wallet is connected
-  const activities = isConnected
-    ? [
-        {
-          action: "Swapped 0.01 BNB for 100000 LEXA",
-          status: "Successful",
-        },
-        {
-          action: "Staked 20000 LEXA",
-          status: "Successful",
-        },
-        {
-          action: "Staked 20000 LEXA",
-          status: "Failed",
-        },
-        {
-          action: "Unstaked 20000 LEXA",
-          status: "Failed",
-        },
-      ]
-    : [];
+interface ActivitiesTabProps {
+  isConnected: boolean;
+  activities?: ActivityItem[];
+  loading?: boolean;
+}
+
+const ActivitiesTab = ({ isConnected, activities = [], loading = false }: ActivitiesTabProps) => {
+  // Format activity action description from transaction data
+  const formatActionDescription = (activity: ActivityItem): string => {
+    const amount = activity.amount ? parseFloat(activity.amount).toLocaleString() : "0";
+    
+    switch (activity.tx_type) {
+      case "stake":
+        return `Staked ${amount} LEXA`;
+      case "unstake":
+        return `Unstaked ${amount} LEXA`;
+      case "claim_rewards":
+        return `Claimed ${amount} LEXA rewards`;
+      case "restake":
+        return `Restaked ${amount} LEXA`;
+      case "swap":
+        return `Swapped ${activity.details?.fromSymbol || "tokens"} for ${activity.details?.toSymbol || "LEXA"}`;
+      default:
+        return "Transaction";
+    }
+  };
+
+  // Map database status to display status
+  const formatStatus = (status?: string): string => {
+    switch (status) {
+      case "confirmed":
+        return "Successful";
+      case "pending":
+        return "Pending";
+      case "failed":
+        return "Failed";
+      default:
+        return "Unknown";
+    }
+  };
 
   return (
     <motion.div
@@ -57,42 +82,47 @@ const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
                 </tr>
               </thead>
               <tbody>
-                {activities.map((activity, index) => (
-                  <motion.tr
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05, duration: 0.3 }}
-                    whileHover={{
-                      backgroundColor: "rgba(255, 255, 255, 0.05)",
-                    }}
-                    className="transition-colors"
-                    style={{
-                      borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-                    }}
-                  >
-                    <td className="py-5 px-6">
-                      <span className="font-medium">{activity.action}</span>
-                    </td>
-                    <td className="py-5 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <span
-                          className={`font-medium ${
-                            activity.status === "Successful"
-                              ? "text-green-400"
-                              : "text-red-400"
-                          }`}
-                        >
-                          {activity.status}
-                        </span>
-                        {activity.status === "Successful" ? (
-                          <svg
-                            className="w-5 h-5 text-green-400"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
+                {activities.map((activity, index) => {
+                  const displayStatus = formatStatus(activity.status);
+                  const isSuccess = activity.status === "confirmed";
+                  return (
+                    <motion.tr
+                      key={activity.tx_hash || index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05, duration: 0.3 }}
+                      whileHover={{
+                        backgroundColor: "rgba(255, 255, 255, 0.05)",
+                      }}
+                      className="transition-colors"
+                      style={{
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                      }}
+                    >
+                      <td className="py-5 px-6">
+                        <span className="font-medium">{formatActionDescription(activity)}</span>
+                      </td>
+                      <td className="py-5 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span
+                            className={`font-medium ${
+                              isSuccess
+                                ? "text-green-400"
+                                : activity.status === "pending"
+                                  ? "text-yellow-400"
+                                  : "text-red-400"
+                            }`}
                           >
-                            <path
-                              fillRule="evenodd"
+                            {displayStatus}
+                          </span>
+                          {isSuccess ? (
+                            <svg
+                              className="w-5 h-5 text-green-400"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
                               d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
                               clipRule="evenodd"
                             />
@@ -113,50 +143,56 @@ const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
                       </div>
                     </td>
                   </motion.tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile Card View */}
           <div className="lg:hidden space-y-4 p-4">
-            {activities.map((activity, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, duration: 0.3 }}
-                className="rounded-xl p-4 space-y-3"
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.03)",
-                  border: "1px solid rgba(255, 255, 255, 0.05)",
-                }}
-              >
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Action</span>
-                  <span className="font-semibold text-right max-w-50">
-                    {activity.action}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-                  <span className="text-gray-400 text-sm">Status</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`font-medium ${
-                        activity.status === "Successful"
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }`}
-                    >
-                      {activity.status}
+            {activities.map((activity, index) => {
+              const displayStatus = formatStatus(activity.status);
+              const isSuccess = activity.status === "confirmed";
+              return (
+                <motion.div
+                  key={activity.tx_hash || index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05, duration: 0.3 }}
+                  className="rounded-xl p-4 space-y-3"
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid rgba(255, 255, 255, 0.05)",
+                  }}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 text-sm">Action</span>
+                    <span className="font-semibold text-right max-w-50">
+                      {formatActionDescription(activity)}
                     </span>
-                    {activity.status === "Successful" ? (
-                      <svg
-                        className="w-5 h-5 text-green-400"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-700">
+                    <span className="text-gray-400 text-sm">Status</span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`font-medium ${
+                          isSuccess
+                            ? "text-green-400"
+                            : activity.status === "pending"
+                              ? "text-yellow-400"
+                              : "text-red-400"
+                        }`}
                       >
-                        <path
+                        {displayStatus}
+                      </span>
+                      {isSuccess ? (
+                        <svg
+                          className="w-5 h-5 text-green-400"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
                           fillRule="evenodd"
                           d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
                           clipRule="evenodd"
@@ -178,7 +214,8 @@ const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
                   </div>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         </>
       ) : (
@@ -203,7 +240,7 @@ const ActivitiesTab = ({ isConnected }: ActivitiesTabProps) => {
           <p className="text-gray-400 text-center text-sm sm:text-base">
             {isConnected
               ? "Your transaction history will appear here."
-              : "Connect wallet with stakes to view your stakes"}
+              : "Connect wallet with transactions to view your activities"}
           </p>
         </motion.div>
       )}
