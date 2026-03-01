@@ -9,6 +9,7 @@ import { blockchainService } from "@/services/blockchain.service";
 import { stakingService, StakingTier } from "@/services/staking.service";
 import { priceService } from "@/services/price.service";
 import { supabaseService } from "@/services/supabase.service";
+import { useWalletConnection } from "@/hooks/useWalletConnection";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -26,6 +27,7 @@ export default function StakeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { authenticated, user } = usePrivy();
+  const { switchToBNBChain } = useWalletConnection();
   const [stakeAmount, setStakeAmount] = useState("");
   const [duration, setDuration] = useState("90d");
   const [transactionStatus, setTransactionStatus] = useState<
@@ -229,6 +231,11 @@ export default function StakeDetailPage() {
     setErrorMessage("");
 
     try {
+      // Switch to BNB Chain before staking
+      console.log("🔄 Switching to BNB Chain...");
+      await switchToBNBChain();
+      console.log("✓ Wallet switched to BNB Chain");
+
       // Get signer from window.ethereum (injected by Privy)
       if (!window.ethereum) {
         throw new Error("Ethereum provider not available. Please ensure Privy wallet is properly connected.");

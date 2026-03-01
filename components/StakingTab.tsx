@@ -5,6 +5,7 @@ import { useState, useRef, useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { BrowserProvider } from "ethers";
 import { stakingService } from "@/services/staking.service";
+import { useWalletConnection } from "@/hooks/useWalletConnection";
 import TransactionNotification from "@/components/TransactionNotification";
 
 interface StakingHistoryItem {
@@ -93,6 +94,7 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
   };
 
   const { user } = usePrivy();
+  const { switchToBNBChain } = useWalletConnection();
   const [transactionLoading, setTransactionLoading] = useState<number | null>(null); // Track which stake is processing
   const [transactionAction, setTransactionAction] = useState<'claim' | 'restake' | 'unstake' | null>(null); // Track which action is processing
   const [transactionStatus, setTransactionStatus] = useState<{ [key: number]: 'idle' | 'loading' | 'success' | 'error' }>({});
@@ -155,6 +157,11 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
     setNotificationMessage(`${action.charAt(0).toUpperCase() + action.slice(1)} in progress...`);
 
     try {
+      // Switch to BNB Chain before executing transaction
+      console.log("🔄 Switching to BNB Chain...");
+      await switchToBNBChain();
+      console.log("✓ Wallet switched to BNB Chain");
+
       let result;
       const signer = await getSigner();
 
@@ -210,12 +217,12 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
         processingStakesRef.current.delete(stake.stake_index);
       }, 5000);
     }
-  }, [stakes]);
+  }, [stakes, switchToBNBChain]);
 
   // Create wrapper handlers for button clicks
   const handleClaimClick = useCallback((stake: StakingHistoryItem, e?: React.MouseEvent) => {
     return handleStakeAction(stake, 'claim', e);
-  }, [handleStakeAction]);
+  }, [handleStakeAction]); // Handle action already has switchToBNBChain in dependencies
 
   const handleRestakeClick = useCallback((stake: StakingHistoryItem, e?: React.MouseEvent) => {
     return handleStakeAction(stake, 'restake', e);
