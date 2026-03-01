@@ -112,13 +112,13 @@ const Profile = () => {
 
       <div className="text-white min-h-screen ">
         {/* Main Content */}
-        <main className=" mx-auto pt-8 sm:pt-12">
+        <main className=" mx-auto pt-4 sm:pt-6">
           {/* Profile Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="mb-8 sm:mb-12 px-4 sm:px-6 lg:px-8"
+            className="mb-4 sm:mb-6 px-4 sm:px-6 lg:px-8"
           >
             <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8">
               Profile

@@ -169,6 +169,7 @@ class StakingService {
     try {
       const provider = this.getAlchemyProvider();
       console.log("🔍 Checking LEXA allowance for:", userAddress);
+      console.log(`Token Address: ${this.LEXA_TOKEN_ADDRESS}`);
 
       const lexaContract = new ethers.Contract(
         this.LEXA_TOKEN_ADDRESS,
@@ -176,13 +177,25 @@ class StakingService {
         provider
       );
 
-      const allowance = await lexaContract.allowance(
-        userAddress,
-        this.STAKING_CONTRACT_ADDRESS
-      );
+      try {
+        const allowance = await lexaContract.allowance(
+          userAddress,
+          this.STAKING_CONTRACT_ADDRESS
+        );
 
-      console.log("✓ Allowance:", ethers.formatEther(allowance), "LEXA");
-      return allowance;
+        console.log("✓ Allowance:", ethers.formatEther(allowance), "LEXA");
+        return allowance;
+      } catch (allowanceError: any) {
+        console.error("❌ Failed to check allowance:", allowanceError);
+        
+        if (allowanceError.code === 'CALL_EXCEPTION') {
+          throw new Error(
+            `Failed to call allowance on LEXA token at ${this.LEXA_TOKEN_ADDRESS}. The contract may not be a valid ERC20 token or the address may be incorrect.`
+          );
+        }
+        
+        throw allowanceError;
+      }
     } catch (error) {
       console.error("❌ Error checking allowance:", error);
       throw error;
@@ -211,23 +224,38 @@ class StakingService {
       );
 
       console.log(`📤 Approving ${ethers.formatEther(amount)} LEXA for staking contract...`);
+      console.log(`Token Address: ${this.LEXA_TOKEN_ADDRESS}`);
+      console.log(`Spender (Staking Contract): ${this.STAKING_CONTRACT_ADDRESS}`);
 
-      const tx = await lexaContract.approve(
-        this.STAKING_CONTRACT_ADDRESS,
-        amount
-      );
+      try {
+        const tx = await lexaContract.approve(
+          this.STAKING_CONTRACT_ADDRESS,
+          amount
+        );
 
-      console.log("✓ Approval transaction sent:", tx.hash);
+        console.log("✓ Approval transaction sent:", tx.hash);
 
-      console.log("⏳ Waiting for approval confirmation...");
-      const receipt = await tx.wait();
+        console.log("⏳ Waiting for approval confirmation...");
+        const receipt = await tx.wait();
 
-      console.log("✓ Approval confirmed:", receipt);
+        console.log("✓ Approval confirmed:", receipt);
 
-      return {
-        hash: tx.hash,
-        status: receipt?.status === 1,
-      };
+        return {
+          hash: tx.hash,
+          status: receipt?.status === 1,
+        };
+      } catch (approveError: any) {
+        console.error("❌ Approve call failed:", approveError);
+        
+        // Provide helpful error message
+        if (approveError.code === 'CALL_EXCEPTION') {
+          throw new Error(
+            `Failed to call approve on LEXA token. This may indicate the token address (${this.LEXA_TOKEN_ADDRESS}) is incorrect or the contract is not a valid ERC20 token. Error details: ${approveError.message}`
+          );
+        }
+        
+        throw approveError;
+      }
     } catch (error) {
       console.error("Error approving token:", error);
       throw error;

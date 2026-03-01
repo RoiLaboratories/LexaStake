@@ -258,11 +258,11 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
       {stakes.length > 0 ? (
         <>
           {/* Desktop Table View */}
-          <div className="hidden lg:block overflow-x-auto">
+          <div className="hidden lg:block overflow-y-auto overflow-x-hidden">
             <table className="w-full">
               <thead>
                 <tr style={{ borderBottom: "1px solid hsl(220, 15%, 18%)" }}>
-                  <th className="text-left py-5 px-8 text-sm font-medium text-gray-400 whitespace-nowrap">
+                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 whitespace-nowrap">
                     Pools/Amount
                   </th>
                   <th className="text-left py-5 px-8 text-sm font-medium text-gray-400 whitespace-nowrap">
@@ -326,45 +326,45 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                           </div>
                         </div>
                         <div>
-                          <div className="font-medium">LEXA/LEXA</div>
-                          <div className="text-sm text-gray-400">
+                          <div className="font-medium text-sm">LEXA/LEXA</div>
+                          <div className="text-xs text-gray-400">
                             {parseFloat(stake.amount).toLocaleString()}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-6 px-8 whitespace-nowrap">
-                      <span className="font-medium text-cyan-400">
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="font-medium text-cyan-400 text-sm">
                         {calculateAccruedEarned(stake)} LEXA
                       </span>
                     </td>
-                    <td className="py-6 px-8 whitespace-nowrap">
-                      <span className="font-medium text-green-400">
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="font-medium text-green-400 text-sm">
                         {calculateEarned(stake)} LEXA
                       </span>
                     </td>
-                    <td className="py-6 px-8 whitespace-nowrap">
-                      <span className="font-medium">{formatTier(stake.tier, stake.roi_percentage)}</span>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="font-medium text-sm">{formatTier(stake.tier, stake.roi_percentage)}</span>
                     </td>
-                    <td className="py-6 px-8 whitespace-nowrap">
-                      <span className="font-medium">{formatDuration(stake.lock_period)}</span>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="font-medium text-sm">{formatDuration(stake.lock_period)}</span>
                     </td>
-                    <td className="py-6 px-8 whitespace-nowrap">
-                      <span className="font-medium text-gray-300">{formatDate(stake.start_time)}</span>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="font-medium text-gray-300 text-sm">{formatDate(stake.start_time)}</span>
                     </td>
-                    <td className="py-6 px-8 whitespace-nowrap">
-                      <span className={`font-medium ${isUnlocked(stake.start_time, stake.lock_period) ? "text-green-400" : "text-orange-400"}`}>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className={`font-medium text-sm ${isUnlocked(stake.start_time, stake.lock_period) ? "text-green-400" : "text-orange-400"}`}>
                         {formatDate(getUnlockTime(stake.start_time, stake.lock_period))}
                       </span>
                     </td>
-                    <td className="py-6 px-8">
-                      <div className="flex gap-3">
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-1.5">
                         <button 
                           type="button"
                           data-action="claim"
                           onClick={(e) => handleClaimClick(stake, e)}
                           disabled={transactionLoading === stake.stake_index}
-                          className={`px-4 py-3 rounded-lg transition-all text-sm font-semibold whitespace-nowrap ${
+                          className={`px-2 py-1.5 rounded-lg transition-all text-xs font-semibold whitespace-nowrap ${
                             transactionLoading === stake.stake_index && transactionAction === 'claim'
                               ? "bg-yellow-600 text-black cursor-wait"
                               : transactionStatus[stake.stake_index] === 'success'
@@ -381,7 +381,7 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                           data-action="restake"
                           onClick={(e) => handleRestakeClick(stake, e)}
                           disabled={transactionLoading === stake.stake_index}
-                          className={`px-4 py-3 rounded-lg transition-all text-sm font-semibold whitespace-nowrap ${
+                          className={`px-2 py-1.5 rounded-lg transition-all text-xs font-semibold whitespace-nowrap ${
                             transactionLoading === stake.stake_index && transactionAction === 'restake'
                               ? "bg-purple-700 text-white cursor-wait"
                               : transactionStatus[stake.stake_index] === 'success'
@@ -398,7 +398,7 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                           data-action="unstake"
                           onClick={(e) => handleUnstakeClick(stake, e)}
                           disabled={!isUnlocked(stake.start_time, stake.lock_period) || transactionLoading === stake.stake_index}
-                          className={`px-4 py-3 rounded-lg transition-all text-sm font-semibold whitespace-nowrap ${
+                          className={`px-2 py-1.5 rounded-lg transition-all text-xs font-semibold whitespace-nowrap ${
                             transactionLoading === stake.stake_index && transactionAction === 'unstake'
                               ? "bg-blue-700 text-white cursor-wait"
                               : transactionStatus[stake.stake_index] === 'success'
