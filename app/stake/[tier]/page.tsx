@@ -11,6 +11,9 @@ import { priceService } from "@/services/price.service";
 import { supabaseService } from "@/services/supabase.service";
 import { useWalletConnection } from "@/hooks/useWalletConnection";
 
+// Prevent prerendering since this page uses useSearchParams (referral link)
+export const dynamic = "force-dynamic";
+
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
   if (user.wallet?.address) return user.wallet.address;

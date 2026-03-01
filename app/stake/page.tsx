@@ -4,6 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
 import { usePrivy, User } from "@privy-io/react-auth";
 
+// Prevent prerendering since this page uses useSearchParams (referral link)
+export const dynamic = "force-dynamic";
+
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
   if (user.wallet?.address) return user.wallet.address;
