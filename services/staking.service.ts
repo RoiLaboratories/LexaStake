@@ -227,6 +227,22 @@ class StakingService {
       console.log(`Token Address: ${this.LEXA_TOKEN_ADDRESS}`);
       console.log(`Spender (Staking Contract): ${this.STAKING_CONTRACT_ADDRESS}`);
 
+      // Verify we're on the correct network before approval
+      try {
+        const network = await signer.provider?.getNetwork();
+        console.log(`📊 Current network: ${network?.name} (chainId: ${network?.chainId})`);
+        if (network?.chainId !== BigInt(56)) {
+          throw new Error(
+            `You are on the wrong network (${network?.name}). Please switch to BNB Chain (chainId 56) in your wallet.`
+          );
+        }
+      } catch (networkError: any) {
+        if (networkError.message.includes('wrong network')) {
+          throw networkError;
+        }
+        console.warn("⚠️ Could not verify network:", networkError);
+      }
+
       try {
         const tx = await lexaContract.approve(
           this.STAKING_CONTRACT_ADDRESS,
@@ -249,6 +265,15 @@ class StakingService {
         
         // Provide helpful error message
         if (approveError.code === 'CALL_EXCEPTION') {
+          // Mobile wallet network switching issue
+          const errorMsg = approveError.message || '';
+          if (errorMsg.includes('revert') || errorMsg.includes('estimateGas')) {
+            throw new Error(
+              'Network Error: Your wallet may not be properly connected to BNB Chain. ' +
+              'Please manually switch to BNB Chain in your Bitget app settings and try again.'
+            );
+          }
+          
           throw new Error(
             `Failed to call approve on LEXA token. This may indicate the token address (${this.LEXA_TOKEN_ADDRESS}) is incorrect or the contract is not a valid ERC20 token. Error details: ${approveError.message}`
           );
