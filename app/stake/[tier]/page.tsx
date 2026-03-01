@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 import { usePrivy, User } from "@privy-io/react-auth";
@@ -26,8 +26,12 @@ function extractWalletAddress(user: User | null): string | null {
 export default function StakeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { authenticated, user } = usePrivy();
   const { switchToBNBChain } = useWalletConnection();
+
+  // Get referral address from URL parameter
+  const referralAddress = searchParams.get("ref");
   const [stakeAmount, setStakeAmount] = useState("");
   const [duration, setDuration] = useState("90d");
   const [transactionStatus, setTransactionStatus] = useState<
@@ -283,7 +287,7 @@ export default function StakeDetailPage() {
           amount: amountInWei,
           tier: tierEnum,
           durationDays,
-          referrer: undefined, // Optional referrer can be added later
+          referrer: referralAddress || undefined, // Use referral address from URL if available
         },
         signer  // Pass ethers signer from BrowserProvider
       );
@@ -350,6 +354,26 @@ export default function StakeDetailPage() {
 
           if (dbResult.success) {
             console.log("✓ Staking record saved to Supabase");
+
+            // Record referral if one exists
+            if (referralAddress && referralAddress !== walletAddr) {
+              try {
+                console.log("📊 Recording referral conversion...");
+                const referralResult = await supabaseService.recordReferral(
+                  referralAddress,
+                  walletAddr,
+                  stakeAmount,
+                  result.hash
+                );
+                if (referralResult.success) {
+                  console.log("✓ Referral recorded successfully");
+                } else {
+                  console.warn("⚠️ Failed to record referral:", referralResult.error);
+                }
+              } catch (referralError) {
+                console.warn("⚠️ Error recording referral:", referralError);
+              }
+            }
           } else {
             console.warn(
               "⚠️ Failed to save staking record:",

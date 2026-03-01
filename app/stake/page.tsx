@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
 import { usePrivy, User } from "@privy-io/react-auth";
 
@@ -18,7 +18,11 @@ function extractWalletAddress(user: User | null): string | null {
 
 export default function StakePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { authenticated, user } = usePrivy();
+
+  // Get referral address from URL parameter
+  const referralAddress = searchParams.get("ref");
 
   const tiers = [
     {
@@ -48,7 +52,8 @@ export default function StakePage() {
   ];
 
   const handleStakeClick = (tierId: string) => {
-    router.push(`/stake/${tierId}`);
+    const url = `/stake/${tierId}${referralAddress ? `?ref=${referralAddress}` : ""}`;
+    router.push(url);
   };
 
   return (

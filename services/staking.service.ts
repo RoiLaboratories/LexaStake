@@ -338,7 +338,18 @@ class StakingService {
         `💰 Staking ${ethers.formatEther(params.amount)} LEXA for ${params.durationDays} days at tier ${params.tier}...`
       );
 
-      const referrer = params.referrer || ethers.ZeroAddress;
+      // Validate and use referrer if provided
+      let referrer = ethers.ZeroAddress;
+      if (params.referrer) {
+        try {
+          // Verify it's a valid Ethereum address
+          referrer = ethers.getAddress(params.referrer);
+          console.log(`👥 Referrer address: ${referrer}`);
+        } catch (addressError) {
+          console.warn(`⚠️ Invalid referrer address: ${params.referrer}, using zero address`);
+          referrer = ethers.ZeroAddress;
+        }
+      }
 
       console.log("⏳ Sending stake transaction to blockchain...");
       const tx = await stakingContract.stake(

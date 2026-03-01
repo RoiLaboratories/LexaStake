@@ -313,6 +313,250 @@ class SupabaseService {
       };
     }
   }
+
+  /**
+   * Record a referral conversion
+   */
+  async recordReferral(
+    referrerAddress: string,
+    referredAddress: string,
+    stakeAmount: string,
+    txHash: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log("👥 Recording referral via API...");
+
+      // Call the server-side API route that handles referral recording
+      const response = await fetch("/api/referrals/record", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          referrer_address: referrerAddress,
+          referred_address: referredAddress,
+          stake_amount: stakeAmount,
+          tx_hash: txHash,
+          reward_amount: "50", // 50 LEXA reward per referral
+          status: "pending", // Status is pending until smart contract processes it
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(
+          "❌ Error recording referral (API):",
+          errorData.error || response.statusText
+        );
+        return {
+          success: false,
+          error: errorData.error || `HTTP ${response.status}`,
+        };
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("✓ Referral recorded:", result.data);
+        return { success: true };
+      } else {
+        return {
+          success: false,
+          error: result.error,
+        };
+      }
+    } catch (error) {
+      console.error("❌ Error recording referral:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Record a swap referral conversion
+   * @param swapInputAmount - The amount of BNB spent (input to the swap)
+   */
+  async recordSwapReferral(
+    referrerAddress: string,
+    referredAddress: string,
+    swapInputAmount: string,
+    txHash: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log("🔄 Recording swap referral via API...");
+
+      // Calculate 2% reward of the INPUT BNB amount
+      const inputAmount = parseFloat(swapInputAmount);
+      const rewardAmount = (inputAmount * 0.02).toString();
+
+      console.log(`💰 Swap referral: Input=${inputAmount} BNB, Reward=${rewardAmount} BNB (2%)`);
+
+      // Call the server-side API route that handles referral recording
+      const response = await fetch("/api/referrals/record", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          referrer_address: referrerAddress,
+          referred_address: referredAddress,
+          type: "swap",
+          swap_input_amount: swapInputAmount,
+          reward_amount: rewardAmount,
+          reward_token: "BNB",
+          tx_hash: txHash,
+          status: "pending", // Status is pending until reward is distributed
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(
+          "❌ Error recording swap referral (API):",
+          errorData.error || response.statusText
+        );
+        return {
+          success: false,
+          error: errorData.error || `HTTP ${response.status}`,
+        };
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log("✓ Swap referral recorded:", result.data);
+        return { success: true };
+      } else {
+        return {
+          success: false,
+          error: result.error,
+        };
+      }
+    } catch (error) {
+      console.error("❌ Error recording swap referral:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Get referral earnings for a user (secure)
+   * Uses a SECURITY DEFINER function that ensures users can only see their own earnings
+   */
+  async getReferralEarnings(walletAddress: string) {
+    try {
+      if (!supabaseClient) {
+        return null;
+      }
+
+      console.log("💰 Fetching referral earnings for:", walletAddress);
+
+      // Call the secure SQL function that respects the user's permissions
+      const { data, error } = await supabaseClient
+        .rpc("get_user_referral_earnings", {
+          user_address: walletAddress.toLowerCase(),
+        });
+
+      if (error) {
+        console.error("❌ Error fetching referral earnings:", error);
+        return null;
+      }
+
+      // The function returns a single row with aggregated data
+      const earningsData = data && data.length > 0 ? data[0] : null;
+
+      if (earningsData) {
+        console.log("✓ Referral earnings fetched:", {
+          totalEarnings: earningsData.total_earned,
+          totalReferrals: earningsData.total_referrals,
+          statuses: {
+            pending: earningsData.pending_referrals,
+            completed: earningsData.completed_referrals,
+          },
+        });
+
+        return {
+          referrals: null, // Get individual referrals separately if needed
+          totalEarnings: earningsData.total_earned || 0,
+          totalReferrals: earningsData.total_referrals || 0,
+          statuses: {
+            pending: earningsData.pending_referrals || 0,
+            completed: earningsData.completed_referrals || 0,
+            failed: 0,
+          },
+          lastReferralDate: earningsData.last_referral_date,
+        };
+      }
+
+      return {
+        referrals: null,
+        totalEarnings: 0,
+        totalReferrals: 0,
+        statuses: { pending: 0, completed: 0, failed: 0 },
+        lastReferralDate: null,
+      };
+    } catch (error) {
+      console.error("❌ Error getting referral earnings:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get swap-specific referral earnings for a user
+   */
+  async getSwapReferralEarnings(walletAddress: string) {
+    try {
+      if (!supabaseClient) {
+        return null;
+      }
+
+      console.log("💰 Fetching swap referral earnings for:", walletAddress);
+
+      // Call the secure SQL function for swap earnings
+      const { data, error } = await supabaseClient
+        .rpc("get_swap_referral_earnings", {
+          user_address: walletAddress.toLowerCase(),
+        });
+
+      if (error) {
+        console.error("❌ Error fetching swap referral earnings:", error);
+        return null;
+      }
+
+      // The function returns a single row with aggregated data
+      const earningsData = data && data.length > 0 ? data[0] : null;
+
+      if (earningsData) {
+        console.log("✓ Swap referral earnings fetched:", {
+          totalSwapReferrals: earningsData.total_swap_referrals,
+          totalBnbEarned: earningsData.total_bnb_earned,
+          pendingBnb: earningsData.pending_bnb,
+          completedBnb: earningsData.completed_bnb,
+        });
+
+        return {
+          totalSwapReferrals: earningsData.total_swap_referrals || 0,
+          totalBnbEarned: earningsData.total_bnb_earned || 0,
+          pendingBnb: earningsData.pending_bnb || 0,
+          completedBnb: earningsData.completed_bnb || 0,
+        };
+      }
+
+      return {
+        totalSwapReferrals: 0,
+        totalBnbEarned: 0,
+        pendingBnb: 0,
+        completedBnb: 0,
+      };
+    } catch (error) {
+      console.error("❌ Error getting swap referral earnings:", error);
+      return null;
+    }
+  }
 }
 
 export const supabaseService = new SupabaseService();

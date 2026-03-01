@@ -1,17 +1,53 @@
 "use client";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Copy, Check } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
+import { usePrivy, User } from "@privy-io/react-auth";
+
+function extractWalletAddress(user: User | null): string | null {
+  if (!user) return null;
+  if (user.wallet?.address) return user.wallet.address;
+  const walletAccount = user.linkedAccounts?.find(
+    (acc) => "type" in acc && acc.type === "wallet",
+  );
+  if (walletAccount && "address" in walletAccount) {
+    return (walletAccount as { address: string }).address;
+  }
+  return null;
+}
 
 export default function EarnPage() {
+  const { authenticated, user } = usePrivy();
   const [copied, setCopied] = useState(false);
+  const [stakeReferralLink, setStakeReferralLink] = useState("");
+  const [swapReferralLink, setSwapReferralLink] = useState("");
+  const [selectedReferralType, setSelectedReferralType] = useState<"stake" | "swap">("stake");
 
-  const referralLink = "https://lexastake.xyz";
+  useEffect(() => {
+    if (authenticated && user) {
+      const walletAddress = extractWalletAddress(user);
+      if (walletAddress) {
+        // Generate both referral links
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://lexastake.xyz";
+        const stakeLink = `${baseUrl}/stake?ref=${walletAddress}`;
+        const swapLink = `${baseUrl}/swap?ref=${walletAddress}`;
+        setStakeReferralLink(stakeLink);
+        setSwapReferralLink(swapLink);
+        console.log("📤 Stake referral link generated:", stakeLink);
+        console.log("📤 Swap referral link generated:", swapLink);
+      }
+    } else {
+      setStakeReferralLink("https://lexastake.xyz");
+      setSwapReferralLink("https://lexastake.xyz");
+    }
+  }, [authenticated, user]);
+
+  const currentLink = selectedReferralType === "stake" ? stakeReferralLink : swapReferralLink;
 
   const handleCopy = async () => {
-    if (referralLink) {
-      await navigator.clipboard.writeText(referralLink);
+    if (currentLink) {
+      await navigator.clipboard.writeText(currentLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -55,10 +91,43 @@ export default function EarnPage() {
                 Share referral link
               </h3>
 
+              {/* Tabs for Stake and Swap */}
+              <div className="flex gap-2 sm:gap-3 mb-4">
+                <button
+                  onClick={() => setSelectedReferralType("stake")}
+                  className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold transition-all ${
+                    selectedReferralType === "stake"
+                      ? "bg-yellow-500 text-black"
+                      : "border-2 border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
+                  }`}
+                >
+                  Stake Referral
+                </button>
+                <button
+                  onClick={() => setSelectedReferralType("swap")}
+                  className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold transition-all ${
+                    selectedReferralType === "swap"
+                      ? "bg-yellow-500 text-black"
+                      : "border-2 border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
+                  }`}
+                >
+                  Swap Referral
+                </button>
+              </div>
+
+              {/* Reward Info */}
+              <div className="text-left mb-3">
+                <p className="text-gray-300 text-sm sm:text-base">
+                  {selectedReferralType === "stake"
+                    ? "Earn 50 LEXA when your referral stakes"
+                    : "Earn 2% of purchase amount in BNB when your referral swaps"}
+                </p>
+              </div>
+
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                 <div className="flex-1 border-2 border-yellow-600/50 rounded-xl sm:rounded-md p-3 sm:p-4 bg-black/40 backdrop-blur-sm overflow-hidden">
                   <p className="text-white text-left font-mono text-xs sm:text-sm md:text-base break-all">
-                    {referralLink}
+                    {currentLink}
                   </p>
                 </div>
 
