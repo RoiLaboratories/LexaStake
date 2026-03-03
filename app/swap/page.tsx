@@ -1,8 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Settings, ArrowDownUp, RefreshCw } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
 import { swapService } from "@/services/swap.service";
 import { supabaseService } from "@/services/supabase.service";
@@ -12,9 +11,6 @@ import SwapSettings from "@/components/SwapSettings";
 import SwapInput from "@/components/swapInput";
 import { usePrivy, User } from "@privy-io/react-auth";
 import { TOKENS } from "@/constants/tokens";
-
-// Prevent prerendering since this page uses useSearchParams (referral link)
-export const dynamic = "force-dynamic";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -28,16 +24,19 @@ function extractWalletAddress(user: User | null): string | null {
   return null;
 }
 
-export default function SwapPage() {
+interface SwapPageClientProps {
+  referrer?: string;
+}
+
+export function SwapPageClient({ referrer }: SwapPageClientProps) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [referralAddress, setReferralAddress] = useState<string | null>(null);
+  const [referralAddress, setReferralAddress] = useState<string | null>(referrer || null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [sellTokenBalance, setSellTokenBalance] = useState<string | null>(null);
   const [receiveTokenBalance, setReceiveTokenBalance] = useState<string | null>(null);
 
   const { authenticated, user, login } = usePrivy();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     console.log("📄 [SWAP_PAGE] Component mounted - console is working!");
@@ -115,14 +114,6 @@ export default function SwapPage() {
     }
   }, [user, walletAddress]);
 
-  // Get referral address from URL
-  useEffect(() => {
-    const ref = searchParams.get("ref");
-    if (ref) {
-      setReferralAddress(ref);
-      console.log("📊 Referral address captured:", ref);
-    }
-  }, [searchParams]);
   // Handle transaction recording and referral after successful swap
   useEffect(() => {
     if (
@@ -679,5 +670,21 @@ export default function SwapPage() {
         </div>
       </main>
     </>
+  );
+}
+
+// Server Component - can be prerendered
+export default async function SwapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>;
+}) {
+  // Await the searchParams
+  const { ref } = await searchParams;
+
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <SwapPageClient referrer={ref} />
+    </Suspense>
   );
 }
