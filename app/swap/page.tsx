@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Settings, ArrowDownUp, RefreshCw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
-
 import { swapService } from "@/services/swap.service";
 import { supabaseService } from "@/services/supabase.service";
 import { useSwap } from "@/hooks/useSwap";
@@ -13,6 +12,9 @@ import SwapSettings from "@/components/SwapSettings";
 import SwapInput from "@/components/swapInput";
 import { usePrivy, User } from "@privy-io/react-auth";
 import { TOKENS } from "@/constants/tokens";
+
+// Prevent prerendering since this page uses useSearchParams (referral link)
+export const dynamic = "force-dynamic";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
