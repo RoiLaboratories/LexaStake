@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Copy, Check } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 import { usePrivy, User } from "@privy-io/react-auth";
+import { supabaseService } from "@/services/supabase.service";
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -23,6 +24,19 @@ export default function EarnPage() {
   const [stakeReferralLink, setStakeReferralLink] = useState("");
   const [swapReferralLink, setSwapReferralLink] = useState("");
   const [selectedReferralType, setSelectedReferralType] = useState<"stake" | "swap">("stake");
+  const [referralEarnings, setReferralEarnings] = useState<{
+    totalEarnings: string;
+    totalReferrals: number;
+    pending: number;
+    completed: number;
+  } | null>(null);
+  const [swapEarnings, setSwapEarnings] = useState<{
+    totalEarnings: string;
+    totalReferrals: number;
+    pending: number;
+    completed: number;
+  } | null>(null);
+  const [isLoadingEarnings, setIsLoadingEarnings] = useState(false);
 
   useEffect(() => {
     if (authenticated && user) {
@@ -36,14 +50,51 @@ export default function EarnPage() {
         setSwapReferralLink(swapLink);
         console.log("📤 Stake referral link generated:", stakeLink);
         console.log("📤 Swap referral link generated:", swapLink);
+
+        // Fetch referral earnings
+        fetchReferralEarnings(walletAddress);
       }
     } else {
       setStakeReferralLink("https://lexastake.xyz");
       setSwapReferralLink("https://lexastake.xyz");
+      setReferralEarnings(null);
+      setSwapEarnings(null);
     }
   }, [authenticated, user]);
 
+  const fetchReferralEarnings = async (walletAddress: string) => {
+    setIsLoadingEarnings(true);
+    try {
+      // Fetch stake referral earnings
+      const stakeData = await supabaseService.getReferralEarnings(walletAddress);
+      if (stakeData) {
+        setReferralEarnings({
+          totalEarnings: stakeData.totalEarnings || "0",
+          totalReferrals: stakeData.totalReferrals || 0,
+          pending: stakeData.statuses?.pending || 0,
+          completed: stakeData.statuses?.completed || 0,
+        });
+      }
+
+      // Fetch swap referral earnings
+      const swapData = await supabaseService.getSwapReferralEarnings(walletAddress);
+      if (swapData) {
+        setSwapEarnings({
+          totalEarnings: swapData.totalEarnings || "0",
+          totalReferrals: swapData.totalReferrals || 0,
+          pending: swapData.statuses?.pending || 0,
+          completed: swapData.statuses?.completed || 0,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error fetching earnings:", error);
+    } finally {
+      setIsLoadingEarnings(false);
+    }
+  };
+
   const currentLink = selectedReferralType === "stake" ? stakeReferralLink : swapReferralLink;
+  const currentEarnings = selectedReferralType === "stake" ? referralEarnings : swapEarnings;
 
   const handleCopy = async () => {
     if (currentLink) {

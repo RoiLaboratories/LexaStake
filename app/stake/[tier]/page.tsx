@@ -358,6 +358,29 @@ export default function StakeDetailPage() {
           if (dbResult.success) {
             console.log("✓ Staking record saved to Supabase");
 
+            // Record transaction in activities
+            try {
+              console.log("📋 Recording transaction...");
+              await supabaseService.recordTransaction(
+                {
+                  user_address: walletAddr,
+                  tx_hash: result.hash,
+                  tx_type: "stake",
+                  status: "confirmed",
+                  amount: stakeAmount,
+                  details: {
+                    tier: tierName,
+                    duration: durationDays,
+                    roi: roiPercentage,
+                  },
+                },
+                walletAddr
+              );
+              console.log("✓ Transaction recorded in activities");
+            } catch (txError) {
+              console.warn("⚠️ Error recording transaction:", txError);
+            }
+
             // Record referral if one exists
             if (referralAddress && referralAddress !== walletAddr) {
               try {
@@ -370,6 +393,20 @@ export default function StakeDetailPage() {
                 );
                 if (referralResult.success) {
                   console.log("✓ Referral recorded successfully");
+                  
+                  // Mark referral as active since stake was successful
+                  const statusUpdate = await supabaseService.updateReferralStatus(
+                    referralAddress,
+                    walletAddr,
+                    result.hash,
+                    "active"
+                  );
+                  
+                  if (statusUpdate.success) {
+                    console.log("✓ Referral status updated to active");
+                  } else {
+                    console.warn("⚠️ Failed to update referral status:", statusUpdate.error);
+                  }
                 } else {
                   console.warn("⚠️ Failed to record referral:", referralResult.error);
                 }

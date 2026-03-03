@@ -326,6 +326,12 @@ class SupabaseService {
     try {
       console.log("👥 Recording referral via API...");
 
+      // Normalize addresses to lowercase for consistency
+      const normalizedReferrer = referrerAddress.toLowerCase();
+      const normalizedReferred = referredAddress.toLowerCase();
+
+      console.log(`📝 Addresses: Referrer=${normalizedReferrer}, Referred=${normalizedReferred}`);
+
       // Call the server-side API route that handles referral recording
       const response = await fetch("/api/referrals/record", {
         method: "POST",
@@ -333,11 +339,13 @@ class SupabaseService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          referrer_address: referrerAddress,
-          referred_address: referredAddress,
+          type: "stake", // Required: specify this is a stake referral
+          referrer_address: normalizedReferrer,
+          referred_address: normalizedReferred,
           stake_amount: stakeAmount,
           tx_hash: txHash,
           reward_amount: "50", // 50 LEXA reward per referral
+          reward_token: "LEXA", // Required: specify reward token
           status: "pending", // Status is pending until smart contract processes it
         }),
       });
@@ -387,11 +395,16 @@ class SupabaseService {
     try {
       console.log("🔄 Recording swap referral via API...");
 
+      // Normalize addresses to lowercase for consistency
+      const normalizedReferrer = referrerAddress.toLowerCase();
+      const normalizedReferred = referredAddress.toLowerCase();
+
       // Calculate 2% reward of the INPUT BNB amount
       const inputAmount = parseFloat(swapInputAmount);
       const rewardAmount = (inputAmount * 0.02).toString();
 
       console.log(`💰 Swap referral: Input=${inputAmount} BNB, Reward=${rewardAmount} BNB (2%)`);
+      console.log(`📝 Addresses: Referrer=${normalizedReferrer}, Referred=${normalizedReferred}`);
 
       // Call the server-side API route that handles referral recording
       const response = await fetch("/api/referrals/record", {
@@ -400,8 +413,8 @@ class SupabaseService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          referrer_address: referrerAddress,
-          referred_address: referredAddress,
+          referrer_address: normalizedReferrer,
+          referred_address: normalizedReferred,
           type: "swap",
           swap_input_amount: swapInputAmount,
           reward_amount: rewardAmount,
@@ -539,22 +552,142 @@ class SupabaseService {
         });
 
         return {
-          totalSwapReferrals: earningsData.total_swap_referrals || 0,
-          totalBnbEarned: earningsData.total_bnb_earned || 0,
-          pendingBnb: earningsData.pending_bnb || 0,
-          completedBnb: earningsData.completed_bnb || 0,
+          referrals: null,
+          totalEarnings: earningsData.total_bnb_earned || 0,
+          totalReferrals: earningsData.total_swap_referrals || 0,
+          statuses: {
+            pending: earningsData.pending_bnb || 0,
+            completed: earningsData.completed_bnb || 0,
+            failed: 0,
+          },
+          lastReferralDate: earningsData.last_referral_date,
         };
       }
 
       return {
-        totalSwapReferrals: 0,
-        totalBnbEarned: 0,
-        pendingBnb: 0,
-        completedBnb: 0,
+        referrals: null,
+        totalEarnings: 0,
+        totalReferrals: 0,
+        statuses: { pending: 0, completed: 0, failed: 0 },
+        lastReferralDate: null,
       };
     } catch (error) {
       console.error("❌ Error getting swap referral earnings:", error);
       return null;
+    }
+  }
+
+  /**
+   * Get all referrals made by a user (both stakes and swaps)
+   */
+  async getUserReferrals(walletAddress: string) {
+    try {
+      if (!supabaseClient) {
+        return [];
+      }
+
+      console.log("📋 Fetching all referrals for:", walletAddress);
+
+      const { data, error } = await supabaseClient
+        .from("referrals")
+        .select("*")
+        .eq("referrer_address", walletAddress.toLowerCase())
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("❌ Error fetching referrals:", error);
+        return [];
+      }
+
+      if (data) {
+        console.log(`✓ Fetched ${data.length} referrals`);
+        return data.map((referral: any) => ({
+          id: referral.id,
+          referredAddress: referral.referred_address,
+          type: referral.type, // 'stake' or 'swap'
+          amount: referral.type === 'stake' ? referral.stake_amount : referral.swap_input_amount,
+          rewardAmount: referral.reward_amount,
+          rewardToken: referral.reward_token,
+          status: referral.status, // 'pending', 'completed', 'failed'
+          txHash: referral.tx_hash,
+          createdAt: referral.created_at,
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      console.error("❌ Error getting user referrals:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Update referral status
+   */
+  async updateReferralStatus(
+    referrerAddress: string,
+    referredAddress: string,
+    txHash: string,
+    status: "active" | "successful" | "failed" = "active"
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!supabaseClient) {
+        return { success: false, error: "Supabase client not initialized" };
+      }
+
+      console.log(`📊 Updating referral status to '${status}' for tx ${txHash}`);
+      console.log(`   Referrer: ${referrerAddress.toLowerCase()}, Referred: ${referredAddress.toLowerCase()}`);
+
+      // First, try to find the referral by tx_hash (should be unique)
+      const { data: existingReferral, error: fetchError } = await supabaseClient
+        .from("referrals")
+        .select("id, tx_hash, referrer_address, referred_address, status")
+        .eq("tx_hash", txHash)
+        .single();
+
+      if (fetchError) {
+        console.warn(`⚠️ Could not find referral with tx_hash ${txHash}:`, fetchError.message);
+        // Try alternate query with addresses as backup
+        const { error: updateError } = await supabaseClient
+          .from("referrals")
+          .update({ status })
+          .eq("tx_hash", txHash)
+          .eq("referrer_address", referrerAddress.toLowerCase())
+          .eq("referred_address", referredAddress.toLowerCase());
+
+        if (updateError) {
+          console.error(`❌ Error updating referral status with alternate query:`, updateError);
+          return { success: false, error: updateError.message };
+        }
+        return { success: true };
+      }
+
+      console.log(`✓ Found referral record:`, {
+        id: existingReferral.id,
+        txHash: existingReferral.tx_hash,
+        currentStatus: existingReferral.status,
+        newStatus: status,
+      });
+
+      // Update the status
+      const { error: updateError } = await supabaseClient
+        .from("referrals")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("id", existingReferral.id);
+
+      if (updateError) {
+        console.error(`❌ Error updating referral status:`, updateError);
+        return { success: false, error: updateError.message };
+      }
+
+      console.log(`✓ Referral status updated from '${existingReferral.status}' to '${status}'`);
+      return { success: true };
+    } catch (error) {
+      console.error("❌ Error updating referral status:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 }

@@ -2,9 +2,11 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Settings, ArrowDownUp, RefreshCw } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import StakeHeader from "@/components/StakeHeader";
 
 import { swapService } from "@/services/swap.service";
+import { supabaseService } from "@/services/supabase.service";
 import { useSwap } from "@/hooks/useSwap";
 import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
@@ -26,12 +28,14 @@ function extractWalletAddress(user: User | null): string | null {
 
 export default function SwapPage() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [referralAddress, setReferralAddress] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [sellTokenBalance, setSellTokenBalance] = useState<string | null>(null);
   const [receiveTokenBalance, setReceiveTokenBalance] = useState<string | null>(null);
 
   const { authenticated, user, login } = usePrivy();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     console.log("📄 [SWAP_PAGE] Component mounted - console is working!");
@@ -109,6 +113,84 @@ export default function SwapPage() {
     }
   }, [user, walletAddress]);
 
+  // Get referral address from URL
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref) {
+      setReferralAddress(ref);
+      console.log("📊 Referral address captured:", ref);
+    }
+  }, [searchParams]);
+  // Handle transaction recording and referral after successful swap
+  useEffect(() => {
+    if (
+      transactionStatus === "success" &&
+      walletAddress &&
+      transactionHash
+    ) {
+      const recordSwapTransaction = async () => {
+        try {
+          // Record transaction in activities
+          console.log("📋 Recording swap transaction...");
+          await supabaseService.recordTransaction(
+            {
+              user_address: walletAddress,
+              tx_hash: transactionHash,
+              tx_type: "swap",
+              status: "confirmed",
+              amount: lastTransactionSellAmount,
+              details: {
+                fromToken: lastTransactionSellToken.symbol,
+                toToken: lastTransactionReceiveToken.symbol,
+                amountReceived: lastTransactionReceiveAmount,
+              },
+            },
+            walletAddress
+          );
+          console.log("✓ Swap transaction recorded in activities");
+        } catch (txError) {
+          console.warn("⚠️ Error recording transaction:", txError);
+        }
+
+        // Record referral if one exists
+        if (referralAddress && referralAddress !== walletAddress) {
+          try {
+            console.log("🎯 Recording swap referral:", {
+              referrer: referralAddress,
+              referred: walletAddress,
+              txHash: transactionHash,
+              amount: lastTransactionSellAmount,
+            });
+
+            // Record the swap referral in the database
+            await supabaseService.recordSwapReferral(
+              referralAddress,
+              walletAddress,
+              lastTransactionSellAmount,
+              transactionHash
+            );
+
+            console.log("✓ Swap referral recorded successfully");
+
+            // Update the referral status to "successful"
+            await supabaseService.updateReferralStatus(
+              referralAddress,
+              walletAddress,
+              transactionHash,
+              "successful"
+            );
+
+            console.log("✓ Referral status updated to successful");
+          } catch (error) {
+            console.error("❌ Failed to record/update swap referral:", error);
+            // Don't throw - the swap was successful, just the referral tracking failed
+          }
+        }
+      };
+
+      recordSwapTransaction();
+    }
+  }, [transactionStatus, walletAddress, transactionHash, referralAddress, lastTransactionSellAmount, lastTransactionSellToken, lastTransactionReceiveToken, lastTransactionReceiveAmount]);
   // Ensure correct network after login
   useEffect(() => {
     if (!authenticated || !walletAddress) return;

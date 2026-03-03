@@ -54,6 +54,7 @@ const Profile = () => {
   const [lexaBalance, setLexaBalance] = useState<string | null>(null);
   const [bnbBalance, setBnbBalance] = useState<string | null>(null);
   const [stakingHistory, setStakingHistory] = useState<StakingHistoryItem[]>([]);
+  const [referrals, setReferrals] = useState<any[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(false);
   const { authenticated, user } = usePrivy();
@@ -65,6 +66,7 @@ const Profile = () => {
       setLexaBalance(null);
       setBnbBalance(null);
       setStakingHistory([]);
+      setReferrals([]);
       setActivities([]);
       return;
     }
@@ -88,6 +90,10 @@ const Profile = () => {
         // Fetch staking history
         const stakingData = await supabaseService.getUserStakingHistory(addr);
         setStakingHistory(stakingData || []);
+
+        // Fetch referrals
+        const referralsData = await supabaseService.getUserReferrals(addr);
+        setReferrals(referralsData || []);
 
         // Fetch activities
         const activitiesData = await supabaseService.getUserTransactions(addr);
@@ -257,7 +263,7 @@ const Profile = () => {
                 />
               )}
               {activeTab === "referrals" && (
-                <ReferralsTab isConnected={authenticated} />
+                <ReferralsTab isConnected={authenticated} referrals={referrals} isLoading={loading} />
               )}
               {activeTab === "activities" && (
                 <ActivitiesTab

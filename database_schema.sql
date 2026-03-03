@@ -81,7 +81,8 @@ RETURNS TABLE(
   total_swap_referrals BIGINT,
   total_bnb_earned NUMERIC,
   pending_bnb NUMERIC,
-  completed_bnb NUMERIC
+  completed_bnb NUMERIC,
+  last_referral_date TIMESTAMP
 ) 
 SECURITY DEFINER
 SET search_path = public
@@ -91,7 +92,8 @@ AS $$
     COUNT(*) as total_swap_referrals,
     SUM(CAST(reward_amount AS NUMERIC)) as total_bnb_earned,
     SUM(CASE WHEN status = 'pending' THEN CAST(reward_amount AS NUMERIC) ELSE 0 END) as pending_bnb,
-    SUM(CASE WHEN status = 'completed' THEN CAST(reward_amount AS NUMERIC) ELSE 0 END) as completed_bnb
+    SUM(CASE WHEN status = 'completed' THEN CAST(reward_amount AS NUMERIC) ELSE 0 END) as completed_bnb,
+    MAX(created_at) as last_referral_date
   FROM referrals
   WHERE referrer_address = LOWER(user_address) AND type = 'swap'
   GROUP BY referrer_address;
