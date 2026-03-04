@@ -45,6 +45,14 @@ declare module "hardhat/types/runtime" {
       name: "LexaStaking",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.LexaStaking__factory>;
+    getContractFactory(
+      name: "SwapFeeCollector",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.SwapFeeCollector__factory>;
+    getContractFactory(
+      name: "SwapReferralRewards",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.SwapReferralRewards__factory>;
 
     getContractAt(
       name: "Ownable",
@@ -86,6 +94,16 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.LexaStaking>;
+    getContractAt(
+      name: "SwapFeeCollector",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.SwapFeeCollector>;
+    getContractAt(
+      name: "SwapReferralRewards",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.SwapReferralRewards>;
 
     deployContract(
       name: "Ownable",
@@ -119,6 +137,14 @@ declare module "hardhat/types/runtime" {
       name: "LexaStaking",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.LexaStaking>;
+    deployContract(
+      name: "SwapFeeCollector",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SwapFeeCollector>;
+    deployContract(
+      name: "SwapReferralRewards",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SwapReferralRewards>;
 
     deployContract(
       name: "Ownable",
@@ -160,6 +186,16 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.LexaStaking>;
+    deployContract(
+      name: "SwapFeeCollector",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SwapFeeCollector>;
+    deployContract(
+      name: "SwapReferralRewards",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SwapReferralRewards>;
 
     // default types
     getContractFactory(

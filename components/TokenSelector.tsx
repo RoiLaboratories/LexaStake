@@ -1,3 +1,4 @@
+"use client";
 import { Token } from "@/types/swap.types";
 import TokenIcon from "./TokenIcon";
 

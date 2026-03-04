@@ -22,3 +22,7 @@ export type { ReentrancyGuard } from "./@openzeppelin/contracts/utils/Reentrancy
 export { ReentrancyGuard__factory } from "./factories/@openzeppelin/contracts/utils/ReentrancyGuard__factory";
 export type { LexaStaking } from "./contracts/staking/LexaStaking";
 export { LexaStaking__factory } from "./factories/contracts/staking/LexaStaking__factory";
+export type { SwapFeeCollector } from "./contracts/SwapFeeCollector";
+export { SwapFeeCollector__factory } from "./factories/contracts/SwapFeeCollector__factory";
+export type { SwapReferralRewards } from "./contracts/SwapReferralRewards";
+export { SwapReferralRewards__factory } from "./factories/contracts/SwapReferralRewards__factory";

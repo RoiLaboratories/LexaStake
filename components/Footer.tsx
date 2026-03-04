@@ -11,16 +11,13 @@ const Footer = () => {
   const socialLinks = [
     {
       icon: <FaXTwitter className="w-5 h-5" />,
-      href: "https://x.com/",
+      href: "https://x.com/lexa_Dao?t=2v5lKBcPvcWoKAy6Y1ACKQ&s=09",
     },
     {
       icon: <FaTelegram className="w-5 h-5" />,
-      href: "https://web.telegram.org/",
+      href: "https://t.me/lexacoingroup",
     },
-    {
-      icon: <FaYoutube className="w-5 h-5" />,
-      href: "https://youtube.com/",
-    },
+   
   ];
 
   return (

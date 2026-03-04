@@ -12,6 +12,12 @@
     "deploy": "hardhat run scripts/deploy.ts",
     "deploy:testnet": "hardhat run scripts/deploy.ts --network bscTestnet",
     "deploy:mainnet": "hardhat run scripts/deploy.ts --network bsc",
+    "deploy:swap-rewards": "hardhat run scripts/deploySwapRewards.ts",
+    "deploy:swap-rewards:testnet": "hardhat run scripts/deploySwapRewards.ts --network bscTestnet",
+    "deploy:swap-rewards:mainnet": "hardhat run scripts/deploySwapRewards.ts --network bsc",
+    "deploy:fee-collector": "hardhat run scripts/deploySwapFeeCollector.ts",
+    "deploy:fee-collector:testnet": "hardhat run scripts/deploySwapFeeCollector.ts --network bscTestnet",
+    "deploy:fee-collector:mainnet": "hardhat run scripts/deploySwapFeeCollector.ts --network bsc",
     "interact": "hardhat run scripts/interact.ts"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+"use client";
 import { Wallet } from "lucide-react";
 import { Token } from "@/types/swap.types";
 import TokenSelector from "./TokenSelector";

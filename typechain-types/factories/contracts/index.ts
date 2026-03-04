@@ -2,3 +2,5 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as staking from "./staking";
+export { SwapFeeCollector__factory } from "./SwapFeeCollector__factory";
+export { SwapReferralRewards__factory } from "./SwapReferralRewards__factory";

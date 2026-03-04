@@ -1,3 +1,4 @@
+"use client";
 // components/swap/TransactionNotification.tsx
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";

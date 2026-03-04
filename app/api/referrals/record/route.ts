@@ -82,6 +82,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if this referrer has already referred this wallet before (prevent duplicate referrals)
+    const { data: existingReferral, error: checkError } = await supabaseAdmin
+      .from("referrals")
+      .select("id, type")
+      .eq("referrer_address", referrer_address.toLowerCase())
+      .eq("referred_address", referred_address.toLowerCase());
+
+    if (checkError && checkError.code !== "42P01") {
+      // 42P01 = table doesn't exist yet (during first setup)
+      console.error("Error checking for duplicate referral:", checkError);
+      return NextResponse.json(
+        { success: false, error: "Failed to validate referral eligibility" },
+        { status: 500 }
+      );
+    }
+
+    // If a referral already exists from this referrer to this referred wallet, reject it
+    if (existingReferral && existingReferral.length > 0) {
+      const previousType = existingReferral[0].type;
+      console.warn(`⚠️ Duplicate referral attempt blocked: ${referrer_address} already referred ${referred_address} for ${previousType}`);
+      return NextResponse.json(
+        { success: false, error: `This wallet has already been referred by you. One wallet can only be referred once per referrer.` },
+        { status: 400 }
+      );
+    }
+
     // Get or create referrer user
     const { data: existingReferrer } = await supabaseAdmin
       .from("users")

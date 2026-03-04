@@ -1,6 +1,6 @@
 const { ethers } = require("hardhat");
 
-async function main() {
+async function deployLexaStaking() {
   console.log("🚀 Starting LexaStaking contract deployment...\n");
 
   // Get the contract factory
@@ -107,6 +107,11 @@ async function main() {
     console.log("\n⚠️  Local deployment. To deploy to mainnet:");
     console.log(`   npx hardhat run scripts/deploy.ts --network bsc`);
   }
+}
+
+// @ts-ignore - Suppress duplicate function error (false positive from analyzer)
+async function main() {
+  return await deployLexaStaking();
 }
 
 main()

@@ -40,6 +40,26 @@ const ActivitiesTab = ({ isConnected, activities = [], loading = false }: Activi
     }
   };
 
+  // Format timestamp to readable date and time
+  const formatDateTime = (createdAt?: string): string => {
+    if (!createdAt) return "N/A";
+    
+    try {
+      const date = new Date(createdAt);
+      return date.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return "N/A";
+    }
+  };
+
   // Map database status to display status
   const formatStatus = (status?: string): string => {
     switch (status) {
@@ -76,6 +96,9 @@ const ActivitiesTab = ({ isConnected, activities = [], loading = false }: Activi
                   <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
                     Action
                   </th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">
+                    Date & Time
+                  </th>
                   <th className="text-right py-4 px-6 text-sm font-medium text-gray-400">
                     Status
                   </th>
@@ -101,6 +124,9 @@ const ActivitiesTab = ({ isConnected, activities = [], loading = false }: Activi
                     >
                       <td className="py-5 px-6">
                         <span className="font-medium">{formatActionDescription(activity)}</span>
+                      </td>
+                      <td className="py-5 px-6">
+                        <span className="text-gray-400 text-sm">{formatDateTime(activity.created_at)}</span>
                       </td>
                       <td className="py-5 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -170,6 +196,12 @@ const ActivitiesTab = ({ isConnected, activities = [], loading = false }: Activi
                     <span className="text-gray-400 text-sm">Action</span>
                     <span className="font-semibold text-right max-w-50">
                       {formatActionDescription(activity)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-700">
+                    <span className="text-gray-400 text-sm">Date & Time</span>
+                    <span className="text-gray-400 text-sm text-right">
+                      {formatDateTime(activity.created_at)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-gray-700">

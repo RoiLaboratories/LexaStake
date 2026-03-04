@@ -1,0 +1,10 @@
+{
+  "contractName": "SwapReferralRewards",
+  "contractAddress": "0x69867Bab16B2261A6866c9c6eD02A21A94C54657",
+  "deployerAddress": "0xe71dD45E7d21409b04b609D0E6C67FFff592d43d",
+  "ownerAddress": "0xe71dD45E7d21409b04b609D0E6C67FFff592d43d",
+  "deploymentTimestamp": "2026-03-04T02:30:36.285Z",
+  "network": "bsc",
+  "chainId": 56,
+  "verified": false
+}

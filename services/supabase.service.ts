@@ -420,7 +420,7 @@ class SupabaseService {
           reward_amount: rewardAmount,
           reward_token: "BNB",
           tx_hash: txHash,
-          status: "pending", // Status is pending until reward is distributed
+          status: "completed", // Reward sent immediately via /api/rewards/send
         }),
       });
 
@@ -688,6 +688,107 @@ class SupabaseService {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };
+    }
+  }
+
+  /**
+   * Upload a profile image for a user
+   * Uses API endpoint to handle upload server-side with service role
+   */
+  async uploadProfileImage(userAddress: string, file: File): Promise<{ success: boolean; url?: string; error?: string }> {
+    try {
+      // Validate file
+      if (!file.type.startsWith("image/")) {
+        return { success: false, error: "File must be an image" };
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        return { success: false, error: "Image must be less than 5MB" };
+      }
+
+      console.log(`📤 Uploading profile image for ${userAddress.slice(0, 6)}...`);
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userAddress", userAddress);
+
+      // Upload via API endpoint
+      const response = await fetch("/api/upload-profile-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error("❌ Error uploading profile image:", result.error);
+        return { success: false, error: result.error };
+      }
+
+      console.log(`✅ Profile image uploaded successfully: ${result.url}`);
+      return { success: true, url: result.url };
+    } catch (error) {
+      console.error("❌ Error in uploadProfileImage:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Upload failed",
+      };
+    }
+  }
+
+  /**
+   * Save profile image URL to database
+   */
+  private async saveProfileImage(userAddress: string, imageUrl: string): Promise<void> {
+    // Use service role client to bypass RLS policies
+    if (!supabaseServiceClient) {
+      console.warn("⚠️ Service role client not available");
+      return;
+    }
+
+    try {
+      // Try to update existing profile, if not found, insert new
+      const { error } = await supabaseServiceClient
+        .from("profiles")
+        .upsert(
+          {
+            user_address: userAddress.toLowerCase(),
+            profile_image_url: imageUrl,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_address" }
+        );
+
+      if (error) {
+        console.warn("⚠️ Could not save profile image URL:", error);
+      }
+    } catch (error) {
+      console.warn("⚠️ Error saving profile image:", error);
+    }
+  }
+
+  /**
+   * Get user's profile image URL
+   */
+  async getProfileImage(userAddress: string): Promise<string | null> {
+    if (!supabaseClient) return null;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from("profiles")
+        .select("profile_image_url")
+        .eq("user_address", userAddress.toLowerCase())
+        .single();
+
+      if (error || !data?.profile_image_url) {
+        return null;
+      }
+
+      return data.profile_image_url;
+    } catch (error) {
+      console.warn("⚠️ Error fetching profile image:", error);
+      return null;
     }
   }
 }

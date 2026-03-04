@@ -3,3 +3,5 @@
 /* eslint-disable */
 import type * as staking from "./staking";
 export type { staking };
+export type { SwapFeeCollector } from "./SwapFeeCollector";
+export type { SwapReferralRewards } from "./SwapReferralRewards";

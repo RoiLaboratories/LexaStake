@@ -254,6 +254,12 @@ export async function POST(request: NextRequest) {
       const inputValue = parseFloat(amountIn);
       const outputValue = parseFloat(amountOut);
       const priceImpact = (inputValue - outputValue) / inputValue * 100;
+      
+      // Calculate 0.3% fee
+      const FEE_BASIS_POINTS = 30; // 0.3%
+      const BASIS_POINTS_DENOMINATOR = 10000; // 100%
+      const feeAmount = (outputValue * FEE_BASIS_POINTS / BASIS_POINTS_DENOMINATOR).toString();
+      const userReceives = (outputValue - parseFloat(feeAmount)).toString();
 
       // Normalize addresses for response
       const normalizedPath = path.map((addr: string) => validateAddress(addr).toLowerCase());
@@ -264,6 +270,9 @@ export async function POST(request: NextRequest) {
         minimumAmountOut,
         priceImpact,
         path: normalizedPath,
+        fee: feeAmount,
+        feePercentage: "0.3",
+        userReceives,
       });
     } catch (rpcError) {
       const errorMsg = rpcError instanceof Error ? rpcError.message : String(rpcError);
@@ -274,6 +283,10 @@ export async function POST(request: NextRequest) {
       
       const mockAmountOut = (parseFloat(amountIn) * 0.9).toString(); // Assume 10% slippage for mock
       const minimumAmountOut = (parseFloat(mockAmountOut) * (1 - slippagePercentage / 100)).toString();
+      
+      // Calculate 0.3% fee on mock output
+      const mockFeeAmount = (parseFloat(mockAmountOut) * 0.003).toString();
+      const mockUserReceives = (parseFloat(mockAmountOut) - parseFloat(mockFeeAmount)).toString();
 
       // Normalize addresses for response
       const normalizedPath = path.map((addr: string) => validateAddress(addr).toLowerCase());
@@ -284,6 +297,9 @@ export async function POST(request: NextRequest) {
         minimumAmountOut,
         priceImpact: 10,
         path: normalizedPath,
+        fee: mockFeeAmount,
+        feePercentage: "0.3",
+        userReceives: mockUserReceives,
         warning: "Using mock quote - RPC unavailable",
       }, { status: 200 });
     }

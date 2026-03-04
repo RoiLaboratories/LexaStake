@@ -5,6 +5,8 @@ import { Settings, ArrowDownUp, RefreshCw } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 import { swapService } from "@/services/swap.service";
 import { supabaseService } from "@/services/supabase.service";
+import { swapRewardsSender } from "@/services/swapRewards.service";
+import { swapFeeCollectorService } from "@/services/swapFeeCollector.service";
 import { useSwap } from "@/hooks/useSwap";
 import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
@@ -145,38 +147,72 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
           console.warn("⚠️ Error recording transaction:", txError);
         }
 
+        // Collect 0.3% fee from swap output
+        try {
+          console.log("💸 Collecting 0.3% swap fee...");
+          const feeResult = await swapFeeCollectorService.collectFee(
+            lastTransactionReceiveToken.address,
+            lastTransactionReceiveAmount,
+            walletAddress,
+            transactionHash
+          );
+
+          if (feeResult.success) {
+            console.log(`✅ Fee collected! Amount: ${feeResult.feeAmount}, TxHash: ${feeResult.txHash}`);
+          } else {
+            console.warn(`⚠️ Failed to collect fee: ${feeResult.error}`);
+            // Don't fail the swap, fee collection is non-critical
+          }
+        } catch (feeError) {
+          console.warn("⚠️ Error collecting fee:", feeError);
+        }
+
         // Record referral if one exists
         if (referralAddress && referralAddress !== walletAddress) {
           try {
-            console.log("🎯 Recording swap referral:", {
+            console.log("🎯 Processing referral reward:", {
               referrer: referralAddress,
               referred: walletAddress,
               txHash: transactionHash,
               amount: lastTransactionSellAmount,
             });
 
-            // Record the swap referral in the database
-            await supabaseService.recordSwapReferral(
+            // Calculate 2% reward
+            const rewardBNB = (parseFloat(lastTransactionSellAmount) * 0.02).toString();
+
+            console.log(`💰 Sending ${rewardBNB} BNB reward to referrer`);
+
+            // Send reward via API (immediately)
+            const rewardResult = await swapRewardsSender.sendRewardViaAPI(
               referralAddress,
               walletAddress,
-              lastTransactionSellAmount,
+              rewardBNB,
               transactionHash
             );
 
-            console.log("✓ Swap referral recorded successfully");
-
-            // Update the referral status to "successful"
-            await supabaseService.updateReferralStatus(
-              referralAddress,
-              walletAddress,
-              transactionHash,
-              "successful"
-            );
-
-            console.log("✓ Referral status updated to successful");
+            if (rewardResult.success) {
+              console.log(`✅ Reward sent! TxHash: ${rewardResult.txHash}`);
+              
+              // Record the referral in database
+              console.log("📝 Recording swap referral in database...");
+              const recordResult = await supabaseService.recordSwapReferral(
+                referralAddress,
+                walletAddress,
+                lastTransactionSellAmount,
+                transactionHash
+              );
+              
+              if (recordResult.success) {
+                console.log("✅ Swap referral recorded in database");
+              } else {
+                console.error(`⚠️ Failed to record referral: ${recordResult.error}`);
+              }
+            } else {
+              console.error(`❌ Failed to send reward: ${rewardResult.error}`);
+            }
           } catch (error) {
-            console.error("❌ Failed to record/update swap referral:", error);
-            // Don't throw - the swap was successful, just the referral tracking failed
+            console.error("❌ Failed to process referral:", error);
+            // Don't throw - the swap was successful, just the reward tracking failed
           }
         }
       };

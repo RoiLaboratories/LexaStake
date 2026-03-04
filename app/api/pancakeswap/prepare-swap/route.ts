@@ -260,6 +260,18 @@ export async function POST(request: NextRequest) {
     console.log(`   quoteOut (wei): ${amountOutWei.toString()}`);
     console.log(`   quoteOut (tokens): ${ethers.formatEther(amountOutWei)}`);
     
+    // ========== CALCULATE 0.3% FEE DEDUCTION ==========
+    const FEE_BASIS_POINTS = 30; // 0.3%
+    const BASIS_POINTS_DENOMINATOR = 10000; // 100%
+    const feeAmountWei = (amountOutWei * BigInt(FEE_BASIS_POINTS)) / BigInt(BASIS_POINTS_DENOMINATOR);
+    const userOutputAmountWei = amountOutWei - feeAmountWei;
+    
+    console.log(`\n💸 FEE DEDUCTION (0.3%):`);
+    console.log(`   Total output (wei): ${amountOutWei.toString()}`);
+    console.log(`   Fee (0.3%):         ${feeAmountWei.toString()}`);
+    console.log(`   User receives (wei): ${userOutputAmountWei.toString()}`);
+    console.log(`   User receives:      ${ethers.formatEther(userOutputAmountWei)} tokens`)
+    
     // ⚠️ GUARD 1: Reject if no liquidity
     if (amountOutWei === BigInt(0)) {
       console.error(`❌ ERROR: Router returned 0 output. No liquidity on this pair.`);
@@ -776,6 +788,10 @@ export async function POST(request: NextRequest) {
         amountIn,
         amountOut: ethers.formatEther(amountOutWei),
         minimumAmountOut: ethers.formatEther(minimumAmountOutWei),
+        userAmountOut: ethers.formatEther(userOutputAmountWei),
+        feeAmount: ethers.formatEther(feeAmountWei),
+        feeAmountWei: feeAmountWei.toString(),
+        feePercentage: "0.3",
         path: swapPath,
         deadline,
         isBNBInput,
@@ -789,6 +805,10 @@ export async function POST(request: NextRequest) {
     console.log(`   Has approval: ${!!response.approval}`);
     console.log(`   Has transfer: ${!!response.transfer}`);
     console.log(`   Input type: ${isBNBInput ? "Native BNB" : "Token"}`);
+    console.log(`   💸 Output breakdown:`);
+    console.log(`       Total output: ${ethers.formatEther(amountOutWei)} tokens`);
+    console.log(`       Fee (0.3%):   ${ethers.formatEther(feeAmountWei)} tokens → Fee Collector`);
+    console.log(`       User gets:    ${ethers.formatEther(userOutputAmountWei)} tokens`);
     if (response.approval) {
       console.log(`   Approval target: ${approvalTarget?.substring(0, 14)}...`);
     }

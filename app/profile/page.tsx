@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePrivy, User } from "@privy-io/react-auth";
+import { Upload } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 import StakingTab from "@/components/StakingTab";
 import ReferralsTab from "@/components/ReferralsTab";
@@ -57,6 +58,9 @@ const Profile = () => {
   const [referrals, setReferrals] = useState<any[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { authenticated, user } = usePrivy();
 
   useEffect(() => {
@@ -68,6 +72,7 @@ const Profile = () => {
       setStakingHistory([]);
       setReferrals([]);
       setActivities([]);
+      setProfileImage(null);
       return;
     }
 
@@ -98,6 +103,12 @@ const Profile = () => {
         // Fetch activities
         const activitiesData = await supabaseService.getUserTransactions(addr);
         setActivities(activitiesData || []);
+
+        // Fetch profile image
+        const imageUrl = await supabaseService.getProfileImage(addr);
+        if (imageUrl) {
+          setProfileImage(imageUrl);
+        }
       } catch (error) {
         console.error("Error fetching profile data:", error);
       } finally {
@@ -107,6 +118,53 @@ const Profile = () => {
 
     fetchData();
   }, [user, authenticated]);
+
+  const handleImageUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image size must be less than 5MB");
+      return;
+    }
+
+    const addr = extractWalletAddress(user);
+    if (!addr) {
+      alert("Wallet address not found");
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const result = await supabaseService.uploadProfileImage(addr, file);
+      if (result.success && result.url) {
+        setProfileImage(result.url);
+        console.log("✓ Profile image uploaded successfully");
+      } else {
+        alert(`Failed to upload image: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      alert("Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
 
   return (
     <>
@@ -135,16 +193,57 @@ const Profile = () => {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-white border-2 border-gray-600"
+                className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden bg-white border-2 border-gray-600 group cursor-pointer"
+                onClick={handleImageUploadClick}
               >
                 <Image
-                  src="/assets/user.png"
+                  src={profileImage || "/assets/user.png"}
                   alt="Profile"
                   width={96}
                   height={96}
                   className="w-full h-full object-cover"
                 />
+                
+                {/* Upload overlay */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  whileHover={{ opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute inset-0 bg-black/60 flex items-center justify-center"
+                >
+                  <motion.div
+                    className="flex flex-col items-center gap-1"
+                  >
+                    <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                    <span className="text-white text-xs font-semibold">Upload</span>
+                  </motion.div>
+                </motion.div>
+
+                {/* Loading overlay */}
+                {uploadingImage && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="absolute inset-0 bg-black/80 flex items-center justify-center"
+                  >
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      className="w-5 h-5 border-2 border-white border-t-yellow-500 rounded-full"
+                    />
+                  </motion.div>
+                )}
               </motion.div>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageFileChange}
+                className="hidden"
+                disabled={uploadingImage}
+              />
 
               <motion.div
                 initial={{ opacity: 0, x: -20 }}

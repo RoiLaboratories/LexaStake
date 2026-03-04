@@ -1,3 +1,4 @@
+"use client";
 // components/swap/SwapSettings.tsx
 import { motion, AnimatePresence } from "framer-motion";
 import { SLIPPAGE_OPTIONS } from "@/constants/tokens";
