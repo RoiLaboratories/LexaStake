@@ -169,7 +169,7 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
       if (action === 'claim') {
         result = await stakingService.claimRewards(stake.stake_index, signer, stake.user_address);
       } else if (action === 'restake') {
-        result = await stakingService.claimRewards(stake.stake_index, signer, stake.user_address);
+        result = await stakingService.restakeRewards(stake.stake_index, signer, stake.user_address);
       } else if (action === 'unstake') {
         result = await stakingService.unstake(stake.stake_index, signer);
       } else {

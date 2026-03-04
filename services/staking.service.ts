@@ -28,6 +28,13 @@ const LEXA_STAKING_ABI = [
     type: "function",
   },
   {
+    inputs: [{ internalType: "uint256", name: "_stakeIndex", type: "uint256" }],
+    name: "restakeRewards",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
     inputs: [
       { internalType: "address", name: "_user", type: "address" },
       { internalType: "uint256", name: "_stakeIndex", type: "uint256" },
@@ -503,6 +510,66 @@ class StakingService {
       };
     } catch (error) {
       console.error("Error claiming rewards:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restake rewards back into the same stake position
+   * @param stakeIndex Index of the stake
+   * @param signer Ethers signer from Privy wallet
+   * @param userAddress User wallet address (for validation)
+   */
+  async restakeRewards(
+    stakeIndex: number,
+    signer: ethers.Signer,
+    userAddress?: string
+  ): Promise<{ hash: string; status: boolean }> {
+    try {
+      if (!signer) {
+        throw new Error("Signer not available");
+      }
+
+      // Get the user's address if not provided
+      const walletAddr = userAddress || (await signer.getAddress());
+
+      // Check and log accumulated rewards (for informational purposes)
+      console.log(`Checking accumulated rewards for stake index ${stakeIndex}...`);
+      try {
+        const accumulatedRewardsStr = await this.getAccumulatedRewards(walletAddr, stakeIndex);
+        const accumulatedRewards = parseFloat(accumulatedRewardsStr);
+        console.log(`Accumulated rewards to restake: ${accumulatedRewardsStr} LEXA`);
+        
+        if (accumulatedRewards <= 0) {
+          throw new Error("No rewards available to restake");
+        }
+      } catch (rewardsError) {
+        console.warn("Could not fetch accumulated rewards:", rewardsError);
+        throw rewardsError;
+      }
+
+      const stakingContract = new ethers.Contract(
+        this.STAKING_CONTRACT_ADDRESS,
+        LEXA_STAKING_ABI,
+        signer
+      );
+
+      console.log(`Attempting to restake rewards for stake index ${stakeIndex}...`);
+
+      const tx = await stakingContract.restakeRewards(stakeIndex);
+
+      console.log("Restake rewards transaction sent:", tx.hash);
+
+      const receipt = await tx.wait();
+
+      console.log("Restake confirmed:", receipt);
+
+      return {
+        hash: tx.hash,
+        status: receipt?.status === 1,
+      };
+    } catch (error) {
+      console.error("Error restaking rewards:", error);
       throw error;
     }
   }
