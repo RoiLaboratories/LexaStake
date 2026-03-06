@@ -99,6 +99,7 @@ export interface LexaStakingInterface extends Interface {
       | "updateTierConfig"
       | "userStakeCount"
       | "userStakes"
+      | "withdrawExcessTokens"
   ): FunctionFragment;
 
   getEvent(
@@ -223,6 +224,10 @@ export interface LexaStakingInterface extends Interface {
     functionFragment: "userStakes",
     values: [AddressLike, BigNumberish]
   ): string;
+  encodeFunctionData(
+    functionFragment: "withdrawExcessTokens",
+    values: [BigNumberish]
+  ): string;
 
   decodeFunctionResult(
     functionFragment: "claimRewards",
@@ -321,6 +326,10 @@ export interface LexaStakingInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "userStakes", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "withdrawExcessTokens",
+    data: BytesLike
+  ): Result;
 }
 
 export namespace EmergencyTokenRecoveryEvent {
@@ -773,6 +782,12 @@ export interface LexaStaking extends BaseContract {
     "view"
   >;
 
+  withdrawExcessTokens: TypedContractMethod<
+    [_amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
@@ -928,6 +943,9 @@ export interface LexaStaking extends BaseContract {
     ],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "withdrawExcessTokens"
+  ): TypedContractMethod<[_amount: BigNumberish], [void], "nonpayable">;
 
   getEvent(
     key: "EmergencyTokenRecovery"

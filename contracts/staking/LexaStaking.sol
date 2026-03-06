@@ -211,15 +211,10 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
             : tierConfig.roi180days;
         uint256 totalRewardsEntitled = (_amount * roiPercentage) / PRECISION;
 
-        // Validate reward pool
-        require(
-            rewardPoolBalance >= totalRewardsEntitled,
-            "Insufficient reward pool"
-        );
-
         // Transfer tokens from user to contract
+        // Note: Rewards are NOT deducted from pool here anymore
+        // They will be checked against actual contract balance when user claims
         lexaToken.safeTransferFrom(msg.sender, address(this), _amount);
-        rewardPoolBalance -= totalRewardsEntitled;
 
         // Create stake
         uint256 stakeIndex = userStakeCount[msg.sender];
@@ -339,6 +334,13 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         uint256 pendingRewards = getAccumulatedRewards(msg.sender, _stakeIndex);
         require(pendingRewards > 0, "No rewards to claim");
 
+        // Check that contract has sufficient balance for rewards
+        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        require(
+            contractBalance >= pendingRewards,
+            "Insufficient contract balance for rewards. Admin must fund the reward pool."
+        );
+
         // Update claimed rewards
         stakeData.totalRewardsClaimed += pendingRewards;
 
@@ -395,6 +397,13 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
 
         // Calculate total to return
         uint256 totalReturn = principalAmount + unclaimedRewards;
+
+        // Check that contract has sufficient balance
+        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        require(
+            contractBalance >= totalReturn,
+            "Insufficient contract balance for unstaking. Admin must fund the reward pool."
+        );
 
         // Transfer principal + unclaimed rewards back to user
         lexaToken.safeTransfer(msg.sender, totalReturn);
@@ -473,16 +482,49 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
 
     /**
      * @notice Emergency recovery of unclaimed reward pool tokens
-     * @notice IMPORTANT: Cannot withdraw locked user funds
+     * @notice IMPORTANT: Cannot withdraw locked user funds or reserved rewards
      */
     function emergencyRecoverTokens(uint256 _amount) 
         external 
         onlyOwner 
     {
         require(_amount > 0, "Amount must be greater than zero");
-        require(_amount <= rewardPoolBalance, "Cannot exceed unclaimed reward pool");
+        require(_amount <= rewardPoolBalance, "Cannot exceed available recovery amount");
         
+        // Deduct from tracking variable
         rewardPoolBalance -= _amount;
+        lexaToken.safeTransfer(owner(), _amount);
+
+        emit EmergencyTokenRecovery(address(lexaToken), _amount, owner(), block.timestamp);
+    }
+
+    /**
+     * @notice Withdraw excess LEXA tokens from the contract
+     * @notice IMPORTANT: Can only withdraw amounts above what's locked in user stakes
+     * @param _amount Amount of LEXA to withdraw
+     */
+    function withdrawExcessTokens(uint256 _amount) 
+        external 
+        onlyOwner 
+    {
+        require(_amount > 0, "Amount must be greater than zero");
+        
+        // Get actual contract balance
+        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        
+        // Calculate total locked in user stakes (principal amounts only)
+        // Available for withdrawal = contract balance - reward pool balance
+        uint256 totalLockedAmount = contractBalance - rewardPoolBalance;
+        
+        // Calculate available for withdrawal
+        uint256 availableForWithdrawal = contractBalance - totalLockedAmount;
+        
+        require(
+            _amount <= availableForWithdrawal, 
+            "Insufficient excess tokens. Cannot withdraw locked user funds."
+        );
+        
+        // Transfer to owner
         lexaToken.safeTransfer(owner(), _amount);
 
         emit EmergencyTokenRecovery(address(lexaToken), _amount, owner(), block.timestamp);

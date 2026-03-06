@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\contracts\\staking\\LexaStaking.sol": {
-      "lastModificationDate": 1772556419423,
-      "contentHash": "e111d78786132aad8e3d2705f1f74fb2",
+      "lastModificationDate": 1772778106982,
+      "contentHash": "05270306b8efc4e9fc40d125df6f1ea3",
       "sourceName": "contracts/staking/LexaStaking.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -41,6 +41,82 @@
       ],
       "artifacts": [
         "LexaStaking"
+      ]
+    },
+    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
+      "lastModificationDate": 1771812751783,
+      "contentHash": "d3c790edc9ccf808a17c5a6cd13614fd",
+      "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../utils/Context.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Ownable"
+      ]
+    },
+    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {
+      "lastModificationDate": 1771812751812,
+      "contentHash": "0d47b53e10b1985efbb396f937626279",
+      "sourceName": "@openzeppelin/contracts/utils/Pausable.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../utils/Context.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Pausable"
       ]
     },
     "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\utils\\ReentrancyGuard.sol": {
@@ -115,44 +191,6 @@
         "IERC20"
       ]
     },
-    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
-      "lastModificationDate": 1771812751783,
-      "contentHash": "d3c790edc9ccf808a17c5a6cd13614fd",
-      "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
-      "solcConfig": {
-        "version": "0.8.20",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "../utils/Context.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "Ownable"
-      ]
-    },
     "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\utils\\SafeERC20.sol": {
       "lastModificationDate": 1771812751840,
       "contentHash": "1fb9edee1d763745a62d0b1954998792",
@@ -190,44 +228,6 @@
       ],
       "artifacts": [
         "SafeERC20"
-      ]
-    },
-    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {
-      "lastModificationDate": 1771812751812,
-      "contentHash": "0d47b53e10b1985efbb396f937626279",
-      "sourceName": "@openzeppelin/contracts/utils/Pausable.sol",
-      "solcConfig": {
-        "version": "0.8.20",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "../utils/Context.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "Pausable"
       ]
     },
     "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\node_modules\\@openzeppelin\\contracts\\utils\\Context.sol": {
@@ -413,45 +413,6 @@
         "IERC165"
       ]
     },
-    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\contracts\\SwapReferralRewards.sol": {
-      "lastModificationDate": 1772560229055,
-      "contentHash": "5c4383866180ee0f02d165a9b788b4d2",
-      "sourceName": "contracts/SwapReferralRewards.sol",
-      "solcConfig": {
-        "version": "0.8.20",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts/access/Ownable.sol",
-        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "SwapReferralRewards"
-      ]
-    },
     "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\contracts\\SwapFeeCollector.sol": {
       "lastModificationDate": 1772603130665,
       "contentHash": "907ccc7319b7f01cefa921d2cba82eb9",
@@ -491,6 +452,45 @@
       ],
       "artifacts": [
         "SwapFeeCollector"
+      ]
+    },
+    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\contracts\\SwapReferralRewards.sol": {
+      "lastModificationDate": 1772560229055,
+      "contentHash": "5c4383866180ee0f02d165a9b788b4d2",
+      "sourceName": "contracts/SwapReferralRewards.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "SwapReferralRewards"
       ]
     }
   }
