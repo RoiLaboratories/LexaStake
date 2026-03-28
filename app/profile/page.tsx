@@ -51,7 +51,7 @@ function extractWalletAddress(user: User | null): string | null {
 }
 
 const Profile = () => {
-  const [activeTab, setActiveTab] = useState("staking");
+  const [activeTab, setActiveTab] = useState("referrals");
   const [lexaBalance, setLexaBalance] = useState<string | null>(null);
   const [bnbBalance, setBnbBalance] = useState<string | null>(null);
   const [stakingHistory, setStakingHistory] = useState<StakingHistoryItem[]>([]);
@@ -315,18 +315,6 @@ const Profile = () => {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setActiveTab("staking")}
-                className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all text-sm sm:text-base whitespace-nowrap ${
-                  activeTab === "staking"
-                    ? "text-yellow-500 bg-transparent"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                My Stakes
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
                 onClick={() => setActiveTab("referrals")}
                 className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all text-sm sm:text-base whitespace-nowrap ${
                   activeTab === "referrals"
@@ -354,13 +342,6 @@ const Profile = () => {
           {/* Content Section */}
           <div>
             <AnimatePresence mode="wait">
-              {activeTab === "staking" && (
-                <StakingTab
-                  isConnected={authenticated}
-                  stakes={stakingHistory}
-                  loading={loading}
-                />
-              )}
               {activeTab === "referrals" && (
                 <ReferralsTab isConnected={authenticated} referrals={referrals} isLoading={loading} />
               )}

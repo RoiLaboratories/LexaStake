@@ -38,7 +38,7 @@ export default function Home() {
             className="pt-4 sm:pt-6"
           >
             <button
-              onClick={() => router.push("/stake")}
+              onClick={() => router.push("/swap")}
               className=" sm:w-auto px-6 sm:px-8 py-3 sm:py-2 bg-transparent border-2 border-[#F4B400]  rounded-md font-semibold text-base sm:text-lg hover:bg-yellow-500 hover:text-black transition-all duration-300 transform hover:scale-105 cursor-pointer text-white"
             >
               Get started
