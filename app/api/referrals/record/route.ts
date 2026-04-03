@@ -82,10 +82,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this referrer has already referred this wallet before (prevent duplicate referrals)
-    const { data: existingReferral, error: checkError } = await supabaseAdmin
+    // Check if this referrer has already referred this wallet before
+    // NOTE: We now ALLOW multiple referrals from the same referrer to the same wallet
+    // Each swap transaction can generate a new reward
+    const { data: existingReferrals, error: checkError } = await supabaseAdmin
       .from("referrals")
-      .select("id, type")
+      .select("id, type, tx_hash")
       .eq("referrer_address", referrer_address.toLowerCase())
       .eq("referred_address", referred_address.toLowerCase());
 
@@ -98,14 +100,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If a referral already exists from this referrer to this referred wallet, reject it
-    if (existingReferral && existingReferral.length > 0) {
-      const previousType = existingReferral[0].type;
-      console.warn(`⚠️ Duplicate referral attempt blocked: ${referrer_address} already referred ${referred_address} for ${previousType}`);
-      return NextResponse.json(
-        { success: false, error: `This wallet has already been referred by you. One wallet can only be referred once per referrer.` },
-        { status: 400 }
-      );
+    // Check if THIS SPECIFIC TRANSACTION has already been recorded (prevent double-recording same tx)
+    if (existingReferrals && existingReferrals.length > 0) {
+      const alreadyRecorded = existingReferrals.some(ref => ref.tx_hash === tx_hash);
+      if (alreadyRecorded) {
+        console.warn(`⚠️ Transaction already recorded: tx_hash ${tx_hash}`);
+        return NextResponse.json(
+          { success: false, error: `This transaction has already been recorded` },
+          { status: 400 }
+        );
+      }
+      // Allow multiple referrals - just warn about existing ones
+      console.log(`ℹ️ Referrer ${referrer_address} has referred ${referred_address} before (${existingReferrals.length} time(s)). This is the swap #${existingReferrals.length + 1}`);
     }
 
     // Get or create referrer user
