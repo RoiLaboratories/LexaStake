@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
+import { getSwapRewardsReadConfig } from '@/utils/contractConfig';
 
 /**
  * GET /api/rewards/earnings?address=0x...
@@ -16,19 +17,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const contractAddress = process.env.NEXT_PUBLIC_SWAP_REWARDS_CONTRACT;
-    if (!contractAddress) {
+    const config = getSwapRewardsReadConfig();
+    if (!config.ok) {
+      console.error('[rewards/earnings] Configuration error:', config.error);
       return NextResponse.json(
-        { success: false, error: 'Contract not configured' },
+        { success: false, error: config.error },
         { status: 500 }
       );
     }
 
-    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://bsc-dataseed1.binance.org:443';
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
 
     const abi = ['function getReferrerEarnings(address) external view returns (uint256)'];
-    const contract = new ethers.Contract(contractAddress, abi, provider);
+    const contract = new ethers.Contract(config.contractAddress, abi, provider);
 
     const earnings = await contract.getReferrerEarnings(address);
 

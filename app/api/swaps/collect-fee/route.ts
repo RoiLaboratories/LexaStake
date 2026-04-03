@@ -1,22 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
+import { getFeeCollectorSignerConfig } from '@/utils/contractConfig';
 
 /**
  * POST /api/swaps/collect-fee
- * Record 0.3% fee collection that was deducted during swap
+ * Record 0.3% fee from swap output
  * 
- * The swap handler is responsible for:
- * 1. Calculating the 0.3% fee from output
- * 2. Sending that fee directly to the SwapFeeCollector contract
- * 3. Sending the remaining amount (97%) to the user
+ * ⚠️  IMPORTANT: This endpoint only RECORDS fees in the contract state.
+ * It does NOT transfer tokens. The fee is tracked for accounting purposes.
  * 
- * This endpoint simply records the fee in the contract's tracking systems
+ * Current Architecture:
+ * 1. User executes swap through PancakeSwap → gets 100% output to wallet
+ * 2. Frontend calls this endpoint → records 0.3% in contract state
+ * 3. Actual fee tokens remain with user (no transfer happens)
+ * 4. Admin can later call withdrawFees() to request fee payment
+ * 
+ * For actual token transfer (future enhancement), the swap flow would need to:
+ * - Route output through intermediary contract
+ * - Deduct 0.3% fee
+ * - Send 99.7% to user, 0.3% to FeeCollector
  * 
  * Body: {
- *   token: "0x...",           // Output token address (e.g., LEXA)
- *   outputAmount: "100",      // Total output amount BEFORE fee deduction
- *   userAddress: "0x...",     // User's wallet address (for reference)
+ *   token: "0x...",           // Output token address
+ *   outputAmount: "100",      // Total output amount from swap
+ *   userAddress: "0x...",     // User's wallet (for tracking)
  *   txHash: "0x..."           // Original swap transaction hash
+ * }
+ * 
+ * Response: {
+ *   success: true,
+ *   feeAmount: "0.3",         // Calculated 0.3% fee
+ *   recordedInState: true,    // Fee recorded in contract state
+ *   actualTokensTransferred: false  // WARNING: No tokens actually transferred
  * }
  */
 export async function POST(request: NextRequest) {
@@ -53,20 +68,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Get contract details
-    const contractAddress = process.env.NEXT_PUBLIC_FEE_COLLECTOR_ADDRESS;
-    const ownerPrivateKey = process.env.PRIVATE_KEY;
-
-    if (!contractAddress || !ownerPrivateKey) {
+    const config = getFeeCollectorSignerConfig();
+    if (!config.ok) {
+      console.error('[swaps/collect-fee] Configuration error:', config.error);
       return NextResponse.json(
-        { success: false, error: 'Fee collector contract not configured' },
+        { success: false, error: config.error },
         { status: 500 }
       );
     }
 
     // Setup blockchain interaction
-    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://bsc-dataseed1.binance.org:443';
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const owner = new ethers.Wallet(ownerPrivateKey, provider);
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+    const owner = new ethers.Wallet(config.privateKey, provider);
 
     // Convert amount to wei (assuming standard 18 decimals)
     const outputAmountWei = ethers.parseEther(outputAmount);
@@ -90,7 +103,7 @@ export async function POST(request: NextRequest) {
       'function collectFee(address _token, uint256 _outputAmount, address _collector) returns (uint256)',
     ];
 
-    const contract = new ethers.Contract(contractAddress, collectorAbi, owner);
+    const contract = new ethers.Contract(config.contractAddress, collectorAbi, owner);
 
     // Record the fee - assumes the 0.3% was already transferred to the contract during swap
     console.log(`📝 Recording fee in contract...`);
@@ -100,6 +113,7 @@ export async function POST(request: NextRequest) {
     console.log(`✅ Fee recorded on block ${receipt?.blockNumber}, tx: ${receipt?.hash}`);
     console.log(`💸 Fee amount (wei): ${feeAmountWei.toString()}`);
     console.log(`💸 Fee amount: ${ethers.formatEther(feeAmountWei)} tokens`);
+    console.log(`📝 NOTE: This fee is recorded in contract state only. Actual token transfer to contract = NOT IMPLEMENTED`);
 
     return NextResponse.json({
       success: true,
@@ -107,6 +121,9 @@ export async function POST(request: NextRequest) {
       blockNumber: receipt?.blockNumber,
       feeAmount: ethers.formatEther(feeAmountWei),
       feeAmountWei: feeAmountWei.toString(),
+      recordedInState: true,
+      actualTokensTransferred: false,
+      note: "Fee is tracked in contract state for accounting. Actual token transfer not yet implemented.",
     });
   } catch (error) {
     console.error('❌ Error collecting fee:', error);
