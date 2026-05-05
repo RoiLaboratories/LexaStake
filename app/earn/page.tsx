@@ -21,9 +21,7 @@ function extractWalletAddress(user: User | null): string | null {
 export default function EarnPage() {
   const { authenticated, user } = usePrivy();
   const [copied, setCopied] = useState(false);
-  const [stakeReferralLink, setStakeReferralLink] = useState("");
   const [swapReferralLink, setSwapReferralLink] = useState("");
-  const [selectedReferralType, setSelectedReferralType] = useState<"stake" | "swap">("stake");
   const [referralEarnings, setReferralEarnings] = useState<{
     totalEarnings: string;
     totalReferrals: number;
@@ -43,21 +41,18 @@ export default function EarnPage() {
       const walletAddress = extractWalletAddress(user);
       if (walletAddress) {
         // Generate both referral links
-        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://lexastake.xyz";
-        const stakeLink = `${baseUrl}/stake?ref=${walletAddress}`;
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://lexaswap.xyz";
+        // const stakeLink = `${baseUrl}/stake?ref=${walletAddress}`;
         const swapLink = `${baseUrl}/swap?ref=${walletAddress}`;
-        setStakeReferralLink(stakeLink);
+        // setStakeReferralLink(stakeLink);
         setSwapReferralLink(swapLink);
-        console.log("📤 Stake referral link generated:", stakeLink);
         console.log("📤 Swap referral link generated:", swapLink);
 
         // Fetch referral earnings
         fetchReferralEarnings(walletAddress);
       }
     } else {
-      setStakeReferralLink("https://lexaswap.xyz");
       setSwapReferralLink("https://lexaswap.xyz");
-      setReferralEarnings(null);
       setSwapEarnings(null);
     }
   }, [authenticated, user]);
@@ -93,8 +88,8 @@ export default function EarnPage() {
     }
   };
 
-  const currentLink = selectedReferralType === "stake" ? stakeReferralLink : swapReferralLink;
-  const currentEarnings = selectedReferralType === "stake" ? referralEarnings : swapEarnings;
+  const currentLink = swapReferralLink;
+  const currentEarnings = swapEarnings;
 
   const handleCopy = async () => {
     if (currentLink) {
