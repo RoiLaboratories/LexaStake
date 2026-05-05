@@ -20,7 +20,7 @@ const StakeHeader = ({
   const router = useRouter();
   const { authenticated, user, login, logout } = usePrivy();
   const [isLoading, setIsLoading] = useState(false);
-  const menuItems = showMenu ? ["Stake", "Swap", "Earn", "Profile"] : [];
+  const menuItems = showMenu ? ["Swap", "Earn", "Profile"] : [];
   const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -113,7 +113,7 @@ const StakeHeader = ({
             className="text-lg sm:text-xl font-bold text-white"
             style={{ fontFamily: "var(--font-cinzel)" }}
           >
-            LEXASTAKE
+            LEXASWAP
           </span>
         </motion.div>
 

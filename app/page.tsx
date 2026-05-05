@@ -17,8 +17,8 @@ export default function Home() {
             transition={{ duration: 0.5 }}
             className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight px-2"
           >
-            <span className="text-yellow-500">Secure</span> Your Crypto Future
-            With <span className="block mt-2 text-yellow-500">Lexastake</span>
+            <span className="text-yellow-500">Swap</span> Seamlessly
+            With <span className="block mt-2 text-yellow-500">LexaSwap</span>
           </motion.h1>
 
           <motion.p
@@ -27,8 +27,7 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-gray-300 text-base sm:text-lg md:text-xl max-w-2xl mx-auto px-2"
           >
-            Earn up to 35% ROI with our tiered staking system. Flexible lock
-            periods, competitive rewards, and complete transparency.
+            Earn up to 2% referral rewards and enjoy low fees on every swap. Experience the future of decentralized trading with LexaSwap.
           </motion.p>
 
           <motion.div

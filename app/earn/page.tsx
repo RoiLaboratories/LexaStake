@@ -55,8 +55,8 @@ export default function EarnPage() {
         fetchReferralEarnings(walletAddress);
       }
     } else {
-      setStakeReferralLink("https://lexastake.xyz");
-      setSwapReferralLink("https://lexastake.xyz");
+      setStakeReferralLink("https://lexaswap.xyz");
+      setSwapReferralLink("https://lexaswap.xyz");
       setReferralEarnings(null);
       setSwapEarnings(null);
     }
@@ -120,14 +120,13 @@ export default function EarnPage() {
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight px-2">
                 <span className="text-yellow-500">Earn</span>{" "}
                 <span className="text-white">passively with</span>{" "}
-                <span className="text-yellow-500">Lexastake</span>
+                <span className="text-yellow-500">LexaSwap</span>
                 <br />
                 <span className="text-white">referral program</span>
               </h1>
 
-              <p className="text-gray-300 text-base sm:text-lg md:text-xl max-w-3xl mx-auto px-2">
-                Earn up to 50 LEXA for referring friends to stake LEXA and 2% of
-                purchase amounts from users who buys LEXA using Lexaswap
+              <p className="text-gray-300 text-base sm:text-lg md:text-xl max-w-3xl mx-auto px-2 whitespace-nowrap">
+                Earn up to 2% of purchase amounts from users who buys LEXA using LexaSwap
               </p>
             </div>
 
@@ -144,7 +143,7 @@ export default function EarnPage() {
 
               {/* Tabs for Stake and Swap */}
               <div className="flex gap-2 sm:gap-3 mb-4">
-                <button
+                {/* <button
                   onClick={() => setSelectedReferralType("stake")}
                   className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold transition-all ${
                     selectedReferralType === "stake"
@@ -153,8 +152,8 @@ export default function EarnPage() {
                   }`}
                 >
                   Stake Referral
-                </button>
-                <button
+                </button> */}
+                {/* <button
                   onClick={() => setSelectedReferralType("swap")}
                   className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold transition-all ${
                     selectedReferralType === "swap"
@@ -163,15 +162,15 @@ export default function EarnPage() {
                   }`}
                 >
                   Swap Referral
-                </button>
+                </button> */}
               </div>
 
               {/* Reward Info */}
               <div className="text-left mb-3">
                 <p className="text-gray-300 text-sm sm:text-base">
-                  {selectedReferralType === "stake"
-                    ? "Earn 50 LEXA when your referral stakes"
-                    : "Earn 2% of purchase amount in BNB when your referral swaps"}
+                  {/* {selectedReferralType === "stake" */}
+                    {/* // ? "Earn 50 LEXA when your referral stakes" */}
+                    Earn 2% of purchase amount in BNB when your referral swaps
                 </p>
               </div>
 

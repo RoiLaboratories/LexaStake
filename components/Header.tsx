@@ -75,7 +75,7 @@ const Header = () => {
           className="text-lg sm:text-xl font-bold text-foreground"
           style={{ fontFamily: "var(--font-cinzel)" }}
         >
-          LEXASTAKE
+          LEXASWAP
         </span>
       </motion.div>
 
