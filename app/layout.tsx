@@ -17,7 +17,7 @@ const cinzel = Cinzel({
 });
 
 export const metadata: Metadata = {
-  title: "LEXASTAKE - Secure Your Crypto Future With Lexastake",
+  title: "LEXASWAP - Secure Your Crypto Future With LexaSwap",
   description: "Trade cryptocurrencies with ease on LexaSwap",
 };
 
