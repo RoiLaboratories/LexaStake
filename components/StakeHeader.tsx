@@ -20,7 +20,7 @@ const StakeHeader = ({
   const router = useRouter();
   const { authenticated, user, login, logout } = usePrivy();
   const [isLoading, setIsLoading] = useState(false);
-  const menuItems = showMenu ? ["Swap", "Earn", "Profile"] : [];
+  const menuItems = showMenu ? ["Stake","Swap", "Earn", "Profile"] : [];
   const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 

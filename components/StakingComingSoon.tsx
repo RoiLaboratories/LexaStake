@@ -57,7 +57,7 @@ export default function StakingComingSoon() {
 
             {/* Subheading */}
             <p className="text-base sm:text-lg text-gray-300 max-w-2xl mx-auto mb-8 sm:mb-12">
-              Multiple tiers, flexible terms, and competitive APY. Coming soon to LexaStake.
+              Multiple tiers, flexible terms, and competitive APY. Coming soon to LexaSwap.
             </p>
           </motion.div>
 
@@ -153,7 +153,6 @@ export default function StakingComingSoon() {
                 "Real-time reward tracking",
                 "Transparent fee structure",
                 "Instant claim functionality",
-                "Referral bonuses up to 10%",
                 "Mobile-optimized interface",
               ].map((feature, index) => (
                 <div
