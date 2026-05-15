@@ -22,13 +22,10 @@ CREATE TABLE IF NOT EXISTS referrals (
   swap_input_amount VARCHAR(255),         -- Input amount in BNB sent (swap referrals only)
   reward_amount VARCHAR(255) NOT NULL,    -- 50 LEXA for stakes, 2% of input BNB for swaps
   reward_token VARCHAR(20) NOT NULL,      -- 'LEXA' or 'BNB'
-  tx_hash VARCHAR(255) NOT NULL UNIQUE,   -- Transaction hash
+  tx_hash VARCHAR(255) NOT NULL UNIQUE,   -- Unique transaction hash; repeat wallet pairs are allowed with new txs
   status VARCHAR(50) DEFAULT 'pending',   -- Status: pending, completed, failed
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
-  
-  -- Indexes for faster queries
-  CONSTRAINT unique_referral_conversion UNIQUE (referrer_address, referred_address, tx_hash)
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Create indexes for common queries

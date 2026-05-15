@@ -168,7 +168,7 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
         }
 
         // Record referral if one exists
-        if (referralAddress && referralAddress !== walletAddress) {
+        if (referralAddress && referralAddress.toLowerCase() !== walletAddress.toLowerCase()) {
           try {
             console.log("🎯 Processing referral reward:", {
               referrer: referralAddress,

@@ -57,6 +57,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedReferrerAddress = referrer_address.toLowerCase();
+    const normalizedReferredAddress = referred_address.toLowerCase();
+    const normalizedTxHash = tx_hash.toLowerCase();
+
     // Validate stake_amount is provided for stake referrals
     if (type === 'stake' && !stake_amount) {
       return NextResponse.json(
@@ -74,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prevent self-referrals
-    if (referrer_address.toLowerCase() === referred_address.toLowerCase()) {
+    if (normalizedReferrerAddress === normalizedReferredAddress) {
       console.warn("⚠️ Self-referral attempt blocked");
       return NextResponse.json(
         { success: false, error: "Cannot refer yourself" },
@@ -82,14 +86,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this referrer has already referred this wallet before
-    // NOTE: We now ALLOW multiple referrals from the same referrer to the same wallet
-    // Each swap transaction can generate a new reward
-    const { data: existingReferrals, error: checkError } = await supabaseAdmin
+    // Allow repeat referrals from the same referrer/referred pair.
+    // Only the same transaction hash is blocked so each new swap can earn a reward.
+    const { data: existingReferral, error: checkError } = await supabaseAdmin
       .from("referrals")
-      .select("id, type, tx_hash")
-      .eq("referrer_address", referrer_address.toLowerCase())
-      .eq("referred_address", referred_address.toLowerCase());
+      .select("id, tx_hash")
+      .ilike("tx_hash", normalizedTxHash)
+      .maybeSingle();
 
     if (checkError && checkError.code !== "42P01") {
       // 42P01 = table doesn't exist yet (during first setup)
@@ -100,25 +103,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if THIS SPECIFIC TRANSACTION has already been recorded (prevent double-recording same tx)
-    if (existingReferrals && existingReferrals.length > 0) {
-      const alreadyRecorded = existingReferrals.some(ref => ref.tx_hash === tx_hash);
-      if (alreadyRecorded) {
-        console.warn(`⚠️ Transaction already recorded: tx_hash ${tx_hash}`);
-        return NextResponse.json(
-          { success: false, error: `This transaction has already been recorded` },
-          { status: 400 }
-        );
-      }
-      // Allow multiple referrals - just warn about existing ones
-      console.log(`ℹ️ Referrer ${referrer_address} has referred ${referred_address} before (${existingReferrals.length} time(s)). This is the swap #${existingReferrals.length + 1}`);
+    if (existingReferral) {
+      console.warn(`⚠️ Transaction already recorded: tx_hash ${normalizedTxHash}`);
+      return NextResponse.json(
+        { success: false, error: `This transaction has already been recorded` },
+        { status: 400 }
+      );
     }
 
     // Get or create referrer user
     const { data: existingReferrer } = await supabaseAdmin
       .from("users")
       .select("id")
-      .eq("wallet_address", referrer_address)
+      .eq("wallet_address", normalizedReferrerAddress)
       .single();
 
     let referrerId = existingReferrer?.id;
@@ -127,7 +124,7 @@ export async function POST(request: NextRequest) {
       // Create referrer user
       const { data: newReferrer, error: createReferrerError } = await supabaseAdmin
         .from("users")
-        .insert([{ wallet_address: referrer_address }])
+        .insert([{ wallet_address: normalizedReferrerAddress }])
         .select("id")
         .single();
 
@@ -146,7 +143,7 @@ export async function POST(request: NextRequest) {
     const { data: existingReferred } = await supabaseAdmin
       .from("users")
       .select("id")
-      .eq("wallet_address", referred_address)
+      .eq("wallet_address", normalizedReferredAddress)
       .single();
 
     let referredId = existingReferred?.id;
@@ -155,7 +152,7 @@ export async function POST(request: NextRequest) {
       // Create referred user
       const { data: newReferred, error: createReferredError } = await supabaseAdmin
         .from("users")
-        .insert([{ wallet_address: referred_address }])
+        .insert([{ wallet_address: normalizedReferredAddress }])
         .select("id")
         .single();
 
@@ -183,15 +180,15 @@ export async function POST(request: NextRequest) {
       .insert([
         {
           referrer_id: referrerId,
-          referrer_address: referrer_address.toLowerCase(),
+          referrer_address: normalizedReferrerAddress,
           referred_id: referredId,
-          referred_address: referred_address.toLowerCase(),
+          referred_address: normalizedReferredAddress,
           type: type,
           stake_amount: type === 'stake' ? stake_amount : null,
           swap_input_amount: type === 'swap' ? swap_input_amount : null,
           reward_amount: reward_amount,
           reward_token: reward_token || (type === 'stake' ? 'LEXA' : 'BNB'),
-          tx_hash,
+          tx_hash: normalizedTxHash,
           status: status || "pending",
           created_at: new Date().toISOString(),
         },
