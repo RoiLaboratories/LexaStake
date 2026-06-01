@@ -42,7 +42,20 @@ export interface TransactionRecord {
   tx_type: "stake" | "unstake" | "claim_rewards" | "restake" | "swap";
   status?: "pending" | "confirmed" | "failed";
   amount?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
+}
+
+interface ReferralRow {
+  id?: string;
+  referred_address: string;
+  type: "stake" | "swap";
+  stake_amount?: string | null;
+  swap_input_amount?: string | null;
+  reward_amount: string;
+  reward_token: string;
+  status: "pending" | "completed" | "failed";
+  tx_hash: string;
+  created_at: string;
 }
 
 class SupabaseService {
@@ -384,13 +397,14 @@ class SupabaseService {
 
   /**
    * Record a swap referral conversion
-   * @param swapInputAmount - The amount of BNB spent (input to the swap)
+   * @param swapInputAmount - The amount spent (input to the swap)
    */
   async recordSwapReferral(
     referrerAddress: string,
     referredAddress: string,
     swapInputAmount: string,
-    txHash: string
+    txHash: string,
+    rewardToken: string = "BNB",
   ): Promise<{ success: boolean; error?: string }> {
     try {
       console.log("🔄 Recording swap referral via API...");
@@ -399,11 +413,11 @@ class SupabaseService {
       const normalizedReferrer = referrerAddress.toLowerCase();
       const normalizedReferred = referredAddress.toLowerCase();
 
-      // Calculate 2% reward of the INPUT BNB amount
+      // Calculate 2% reward of the input token amount
       const inputAmount = parseFloat(swapInputAmount);
       const rewardAmount = (inputAmount * 0.02).toString();
 
-      console.log(`💰 Swap referral: Input=${inputAmount} BNB, Reward=${rewardAmount} BNB (2%)`);
+      console.log(`Swap referral: Input=${inputAmount} ${rewardToken}, Reward=${rewardAmount} ${rewardToken} (2%)`);
       console.log(`📝 Addresses: Referrer=${normalizedReferrer}, Referred=${normalizedReferred}`);
 
       // Call the server-side API route that handles referral recording
@@ -418,7 +432,7 @@ class SupabaseService {
           type: "swap",
           swap_input_amount: swapInputAmount,
           reward_amount: rewardAmount,
-          reward_token: "BNB",
+          reward_token: rewardToken,
           tx_hash: txHash,
           status: "completed", // Reward sent immediately via /api/rewards/send
         }),
@@ -601,7 +615,7 @@ class SupabaseService {
 
       if (data) {
         console.log(`✓ Fetched ${data.length} referrals`);
-        return data.map((referral: any) => ({
+        return (data as ReferralRow[]).map((referral) => ({
           id: referral.id,
           referredAddress: referral.referred_address,
           type: referral.type, // 'stake' or 'swap'

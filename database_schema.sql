@@ -19,9 +19,9 @@ CREATE TABLE IF NOT EXISTS referrals (
   referred_address VARCHAR(42) NOT NULL,  -- Ethereum wallet address
   type VARCHAR(20) NOT NULL,              -- 'stake' or 'swap'
   stake_amount VARCHAR(255),              -- Amount of LEXA staked (stake referrals only)
-  swap_input_amount VARCHAR(255),         -- Input amount in BNB sent (swap referrals only)
-  reward_amount VARCHAR(255) NOT NULL,    -- 50 LEXA for stakes, 2% of input BNB for swaps
-  reward_token VARCHAR(20) NOT NULL,      -- 'LEXA' or 'BNB'
+  swap_input_amount VARCHAR(255),         -- Input amount sent (swap referrals only)
+  reward_amount VARCHAR(255) NOT NULL,    -- 50 LEXA for stakes, 2% of input token for swaps
+  reward_token VARCHAR(20) NOT NULL,      -- 'LEXA', 'BNB', or 'USDT'
   tx_hash VARCHAR(255) NOT NULL UNIQUE,   -- Unique transaction hash; repeat wallet pairs are allowed with new txs
   status VARCHAR(50) DEFAULT 'pending',   -- Status: pending, completed, failed
   created_at TIMESTAMP DEFAULT NOW(),

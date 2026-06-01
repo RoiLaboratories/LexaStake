@@ -8,7 +8,7 @@ interface Referral {
   type: "stake" | "swap";
   amount: string;
   rewardAmount: string;
-  rewardToken: "LEXA" | "BNB";
+  rewardToken: "LEXA" | "BNB" | "USDT";
   status: "pending" | "completed" | "failed";
   txHash: string;
   createdAt: string;
@@ -25,21 +25,8 @@ const ReferralsTab = ({ isConnected, referrals, isLoading = false }: ReferralsTa
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "text-green-400 bg-green-400/10";
-      case "pending":
-        return "text-yellow-400 bg-yellow-400/10";
-      case "failed":
-        return "text-red-400 bg-red-400/10";
-      default:
-        return "text-gray-400 bg-gray-400/10";
-    }
-  };
-
-  const getTypeLabel = (type: string, amount: string) => {
-    return type === "stake" ? `${amount} LEXA Stake` : `${amount} BNB Swap`;
+  const getTypeLabel = (type: string, amount: string, rewardToken: string) => {
+    return type === "stake" ? `${amount} LEXA Stake` : `${amount} ${rewardToken} Swap`;
   };
 
   return (
@@ -104,7 +91,7 @@ const ReferralsTab = ({ isConnected, referrals, isLoading = false }: ReferralsTa
                       </span>
                     </td>
                     <td className="py-5 px-6">
-                      <span className="font-medium text-sm">{getTypeLabel(referral.type, referral.amount)}</span>
+                      <span className="font-medium text-sm">{getTypeLabel(referral.type, referral.amount, referral.rewardToken)}</span>
                     </td>
                     <td className="py-5 px-6 text-right">
                       <a
@@ -150,7 +137,7 @@ const ReferralsTab = ({ isConnected, referrals, isLoading = false }: ReferralsTa
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Action</span>
-                  <span className="font-medium">{getTypeLabel(referral.type, referral.amount)}</span>
+                  <span className="font-medium">{getTypeLabel(referral.type, referral.amount, referral.rewardToken)}</span>
                 </div>
                 <div className="pt-2 border-t border-gray-700">
                   <a

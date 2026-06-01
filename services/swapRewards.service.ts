@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 /**
  * Swap Referral Rewards Service
  * 
- * Simple service to send 2% BNB rewards directly to referrers
+ * Simple service to send 2% swap rewards directly to referrers
  * No oracle, no pending status - just send the reward immediately
  */
 
@@ -19,16 +19,19 @@ class SwapRewardsSender {
   }
 
   /**
-   * Send 2% BNB reward to referrer
-   * Calls the contract's sendReward function (owner-only)
+   * Send 2% swap reward to referrer
    * 
    * Note: This should be called from the backend/API, not directly from client
    */
   async sendRewardViaAPI(
     referrerAddress: string,
     swapperAddress: string,
-    rewardAmountBNB: string,
-    txHash: string
+    rewardAmount: string,
+    txHash: string,
+    options?: {
+      rewardToken?: string;
+      tokenAddress?: string;
+    },
   ): Promise<{ success: boolean; error?: string; txHash?: string }> {
     try {
       // Call backend API to send reward (backend has owner private key)
@@ -40,8 +43,10 @@ class SwapRewardsSender {
         body: JSON.stringify({
           referrer: referrerAddress,
           swapper: swapperAddress,
-          amount: rewardAmountBNB,
+          amount: rewardAmount,
           txHash,
+          rewardToken: options?.rewardToken || 'BNB',
+          tokenAddress: options?.tokenAddress,
         }),
       });
 

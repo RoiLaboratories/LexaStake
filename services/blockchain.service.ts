@@ -282,11 +282,11 @@ class BlockchainService {
   }
 
   /**
-   * Fetch BNB and LEXA balances for a wallet
+   * Fetch BNB, LEXA, and USDT balances for a wallet
    */
   async getLexaAndBNBBalances(
     walletAddress: string,
-  ): Promise<{ lexa: string; bnb: string }> {
+  ): Promise<{ lexa: string; bnb: string; usdt: string }> {
     // When Alchemy is configured, try it first (avoids public RPC timeouts)
     const alchemyUrl = getAlchemyUrl();
     if (alchemyUrl) {
@@ -301,7 +301,8 @@ class BlockchainService {
         const bnbBalanceWei = await this.withTimeout(alchemyProvider.getBalance(validWallet));
         const bnbBalance = ethers.formatEther(bnbBalanceWei);
         const lexaBalance = await this.getTokenBalance(walletAddress, TOKENS.LEXA.address);
-        return { lexa: lexaBalance, bnb: bnbBalance };
+        const usdtBalance = await this.getTokenBalance(walletAddress, TOKENS.USDT.address);
+        return { lexa: lexaBalance, bnb: bnbBalance, usdt: usdtBalance };
       } catch (alchemyError) {
         console.warn("Alchemy LEXA/BNB fetch failed, trying public RPCs:", alchemyError);
       }
@@ -333,15 +334,20 @@ class BlockchainService {
         const bnbBalanceWei = await this.withTimeout(provider.getBalance(validWallet));
         const bnbBalance = ethers.formatEther(bnbBalanceWei);
 
-        // Fetch LEXA balance (token contract)
+        // Fetch LEXA and USDT balances (token contracts)
         const lexaBalance = await this.getTokenBalance(
           walletAddress,
           TOKENS.LEXA.address,
+        );
+        const usdtBalance = await this.getTokenBalance(
+          walletAddress,
+          TOKENS.USDT.address,
         );
 
         return {
           lexa: lexaBalance,
           bnb: bnbBalance,
+          usdt: usdtBalance,
         };
       } catch (error) {
         lastError = error as Error;
@@ -373,7 +379,8 @@ class BlockchainService {
         const bnbBalanceWei = await this.withTimeout(alchemyProvider.getBalance(validWallet));
         const bnbBalance = ethers.formatEther(bnbBalanceWei);
         const lexaBalance = await this.getTokenBalance(walletAddress, TOKENS.LEXA.address);
-        return { lexa: lexaBalance, bnb: bnbBalance };
+        const usdtBalance = await this.getTokenBalance(walletAddress, TOKENS.USDT.address);
+        return { lexa: lexaBalance, bnb: bnbBalance, usdt: usdtBalance };
       } catch (alchemyError) {
         console.error("Alchemy endpoint also failed:", alchemyError);
       }
@@ -388,6 +395,7 @@ class BlockchainService {
     return {
       lexa: "0",
       bnb: "0",
+      usdt: "0",
     };
   }
 }

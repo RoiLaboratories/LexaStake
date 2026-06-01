@@ -1,8 +1,8 @@
 {
   "lexaTokenAddress": "0x6fc20e595A8704725DBd160E7c799665706e0bdD",
-  "stakingContractAddress": "0xF62317f3842E52572ABe44f966Bb9cd61a3C489B",
+  "stakingContractAddress": "0x6d013522C16e31a853f0307BfD208c821dc05Aa7",
   "deployerAddress": "0xe71dD45E7d21409b04b609D0E6C67FFff592d43d",
-  "deploymentTimestamp": "2026-03-06T07:01:20.735Z",
+  "deploymentTimestamp": "2026-05-27T16:12:16.375Z",
   "network": "bsc",
   "chainId": 56
 }

@@ -131,7 +131,7 @@ const ERC20_ABI = [
 ];
 
 // WBNB address (wrapped BNB)
-const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaebF2De08d9173bc095c";
+const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 interface SwapParams {
   tokenIn: string;

@@ -21,9 +21,10 @@ export const useSwap = (): UseSwapReturn => {
     useState<TransactionStatus>("idle");
   const [balance, setBalance] = useState("0");
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
-  const [prices, setPrices] = useState<{ bnb: number; lexa: number }>({
+  const [prices, setPrices] = useState<{ bnb: number; lexa: number; usdt: number }>({
     bnb: 0,
     lexa: 0,
+    usdt: 1,
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export const useSwap = (): UseSwapReturn => {
       setPrices({
         bnb: priceData.bnb,
         lexa: priceData.lexa,
+        usdt: priceData.usdt,
       });
     };
 
@@ -202,7 +204,7 @@ export const useSwap = (): UseSwapReturn => {
         
         // Additional validation for known issues
         const lexaExpectedAddress = "0x6fc20e595A8704725DBd160E7c799665706e0bdD";
-        const wbnbExpectedAddress = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
+        const wbnbExpectedAddress = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
         
         if (sellToken.symbol === "LEXA" && sellToken.address.toLowerCase() !== lexaExpectedAddress.toLowerCase()) {
           console.warn(`⚠️  WARNING: LEXA address mismatch!`);
@@ -270,7 +272,7 @@ export const useSwap = (): UseSwapReturn => {
         console.log("📬 Prepare response received - Status:", prepareRes.status, prepareRes.statusText);
 
         if (!prepareRes.ok) {
-          let errorData;
+          let errorData: { error?: string; details?: string };
           try {
             errorData = await prepareRes.json();
           } catch (parseError) {
@@ -281,14 +283,22 @@ export const useSwap = (): UseSwapReturn => {
           }
           console.error("❌ [SWAP] API RESPONSE ERROR:", errorData);
           
+          const apiErrorText = [errorData.error, errorData.details]
+            .filter((value): value is string => typeof value === "string")
+            .join(" ");
+
           // Check for slippage too low error
-          if (errorData.error && errorData.error.includes("SLIPPAGE_TOO_LOW")) {
+          if (apiErrorText.includes("SLIPPAGE_TOO_LOW")) {
             console.error("⚠️  SLIPPAGE TOO LOW - User needs to increase slippage");
             setErrorMessage("❌ Slippage too low for this pair. Please increase slippage to 7% or higher and try again.");
-          } else if (errorData.error && errorData.error.includes("Price impact too high")) {
+          } else if (apiErrorText.includes("Price impact too high")) {
             setErrorMessage("❌ Price impact too high. Try reducing amount or increasing slippage.");
           } else {
-            setErrorMessage(errorData.error || "Failed to prepare swap - check console for details");
+            setErrorMessage(
+              errorData.details ||
+              errorData.error ||
+              "Failed to prepare swap - check console for details",
+            );
           }
           setTransactionStatus("error");
           return;
@@ -326,7 +336,6 @@ export const useSwap = (): UseSwapReturn => {
         }
         
         // Detect swap type and log important details
-        const WBNB_ADDRESS = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
         const isBNBInput = sellToken.symbol === "BNB";  // Native BNB, not WBNB token
         const isBNBOutput = receiveToken.symbol === "BNB";
         

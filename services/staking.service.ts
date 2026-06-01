@@ -3,87 +3,15 @@ import { TOKENS } from "@/constants/tokens";
 
 // LexaStaking Contract ABI (essential functions only)
 const LEXA_STAKING_ABI = [
-  {
-    inputs: [{ internalType: "address", name: "_lexaToken", type: "address" }],
-    stateMutability: "nonpayable",
-    type: "constructor",
-  },
-  {
-    inputs: [
-      { internalType: "uint256", name: "_amount", type: "uint256" },
-      { internalType: "uint8", name: "_tier", type: "uint8" },
-      { internalType: "uint256", name: "_lockDurationDays", type: "uint256" },
-      { internalType: "address", name: "_referrer", type: "address" },
-    ],
-    name: "stake",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "_stakeIndex", type: "uint256" }],
-    name: "claimRewards",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "_stakeIndex", type: "uint256" }],
-    name: "restakeRewards",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      { internalType: "address", name: "_user", type: "address" },
-      { internalType: "uint256", name: "_stakeIndex", type: "uint256" },
-    ],
-    name: "getAccumulatedRewards",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "_stakeIndex", type: "uint256" }],
-    name: "unstake",
-    outputs: [],
-    stateMutability: "nonReentrant",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "address", name: "_user", type: "address" }],
-    name: "getUserStakeCount",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      { internalType: "address", name: "_user", type: "address" },
-      { internalType: "uint256", name: "_index", type: "uint256" },
-    ],
-    name: "userStakes",
-    outputs: [
-      { internalType: "uint256", name: "amount", type: "uint256" },
-      { internalType: "uint8", name: "tier", type: "uint8" },
-      { internalType: "uint256", name: "lockEndTime", type: "uint256" },
-      { internalType: "uint256", name: "rewardsClaimed", type: "uint256" },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint8", name: "_tier", type: "uint8" }],
-    name: "getTierConfig",
-    outputs: [
-      { internalType: "uint256", name: "minStakeAmount", type: "uint256" },
-      { internalType: "uint256", name: "roi90days", type: "uint256" },
-      { internalType: "uint256", name: "roi180days", type: "uint256" },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
+  "function stake(uint256 amount,uint8 tier,uint256 durationDays,address referrer)",
+  "function claimRewards(uint256 stakeIndex)",
+  "function restakeRewards(uint256 stakeIndex)",
+  "function getAccumulatedRewards(address user,uint256 stakeIndex) view returns (uint256)",
+  "function isStakeMatured(address user,uint256 stakeIndex) view returns (bool)",
+  "function unstake(uint256 stakeIndex)",
+  "function userStakeCount(address user) view returns (uint256)",
+  "function userStakes(address user,uint256 index) view returns (uint256 amount,uint256 lockDurationDays,uint256 startTimestamp,uint8 tier,uint256 totalRewardsEntitled,uint256 totalRewardsClaimed,bool active)",
+  "function getTierConfig(uint8 tier) view returns (uint256 minStakeAmount,uint256 roi90days,uint256 roi180days)",
 ];
 
 // ERC20 ABI (for LEXA token approval)
@@ -418,7 +346,7 @@ class StakingService {
       );
 
       // Get user's stake count
-      const stakeCount = await stakingContract.getUserStakeCount(userAddress);
+      const stakeCount = Number(await stakingContract.userStakeCount(userAddress));
       console.log(`📊 User has ${stakeCount} total stakes`);
 
       const stakesWithRewards: { stakeIndex: number; rewards: string }[] = [];
@@ -480,12 +408,12 @@ class StakingService {
         
         if (accumulatedRewards <= 0) {
           console.warn(
-            `⚠️ Contract reports 0 rewards, but attempting claim anyway. ` +
-            `Some contracts may accumulate rewards differently than expected.`
+            `Contract reports 0 claimable rewards. ` +
+            `Claiming is only available after the lock duration elapses.`
           );
         }
       } catch (rewardsError) {
-        console.warn("Could not fetch accumulated rewards, but attempting claim:", rewardsError);
+        console.warn("Could not fetch claimable rewards:", rewardsError);
       }
 
       const stakingContract = new ethers.Contract(
@@ -493,6 +421,11 @@ class StakingService {
         LEXA_STAKING_ABI,
         signer
       );
+
+      const claimableRewardsStr = await this.getAccumulatedRewards(walletAddr, stakeIndex);
+      if (parseFloat(claimableRewardsStr) <= 0) {
+        throw new Error("Rewards are claimable only after the lock duration elapses");
+      }
 
       console.log(`Attempting to claim rewards for stake index ${stakeIndex}...`);
 
@@ -669,13 +602,13 @@ class StakingService {
 
       let stakeCount;
       try {
-        stakeCount = await stakingContract.getUserStakeCount(userAddress);
+        stakeCount = await stakingContract.userStakeCount(userAddress);
       } catch (contractError: any) {
         // If contract call fails, return 0 instead of crashing
         // This handles new users or access control issues
         const errorMsg = contractError?.reason || contractError?.message || String(contractError);
         console.warn(
-          `⚠️ Contract call failed for getUserStakeCount (might be a new user or access control): ${errorMsg}`
+          `⚠️ Contract call failed for userStakeCount (might be a new user or access control): ${errorMsg}`
         );
         return 0;
       }
@@ -702,8 +635,12 @@ class StakingService {
   ): Promise<{
     amount: string;
     tier: number;
+    lockDurationDays: number;
+    startTimestamp: number;
     lockEndTime: number;
+    totalRewardsEntitled: string;
     rewardsClaimed: string;
+    active: boolean;
   }> {
     try {
       const provider = this.getAlchemyProvider();
@@ -717,12 +654,18 @@ class StakingService {
       console.log(`📋 Getting stake details for index ${stakeIndex}...`);
 
       const stake = await stakingContract.userStakes(userAddress, stakeIndex);
+      const lockDurationDays = Number(stake.lockDurationDays);
+      const startTimestamp = Number(stake.startTimestamp);
 
       return {
         amount: ethers.formatEther(stake.amount),
         tier: Number(stake.tier),
-        lockEndTime: Number(stake.lockEndTime),
-        rewardsClaimed: ethers.formatEther(stake.rewardsClaimed),
+        lockDurationDays,
+        startTimestamp,
+        lockEndTime: startTimestamp + lockDurationDays * 86400,
+        totalRewardsEntitled: ethers.formatEther(stake.totalRewardsEntitled),
+        rewardsClaimed: ethers.formatEther(stake.totalRewardsClaimed),
+        active: Boolean(stake.active),
       };
     } catch (error) {
       console.error("❌ Error getting stake details:", error);

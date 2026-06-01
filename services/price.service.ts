@@ -1,11 +1,11 @@
 // services/price.service.ts
 import { TOKENS } from "@/constants/tokens";
 import { pancakeSwapService } from "@/services/pancakeswap.service";
-import { ethers } from "ethers";
 
 interface PriceData {
   bnb: number;
   lexa: number;
+  usdt: number;
   lastUpdated: number;
 }
 
@@ -14,7 +14,7 @@ class PriceService {
   private cacheExpiry = 60000; // Cache for 60 seconds
 
   /**
-   * Get current prices for BNB and LEXA
+   * Get current prices for BNB, LEXA, and USDT
    * - BNB from CoinGecko
    * - LEXA from PancakeSwap (direct DEX price)
    */
@@ -49,19 +49,19 @@ class PriceService {
       try {
         console.log("📡 Fetching LEXA price from PancakeSwap...");
         
-        // Get 1 LEXA in BUSD equivalent using PancakeSwap quote
+        // Get 1 LEXA in USDT equivalent using PancakeSwap quote
         // 1 LEXA = 1 * 10^18 wei
         const oneToken = "1";
         
         const quote = await pancakeSwapService.getSwapQuote(
           TOKENS.LEXA.address,
-          TOKENS.BUSD.address,
+          TOKENS.USDT.address,
           oneToken,
           0 // No slippage for quote purposes
         );
         
         lexaPrice = parseFloat(quote.amountOut);
-        console.log("✓ LEXA price from PancakeSwap:", lexaPrice, "BUSD");
+        console.log("✓ LEXA price from PancakeSwap:", lexaPrice, "USDT");
         
       } catch (error) {
         console.warn("Failed to fetch LEXA price from PancakeSwap:", error);
@@ -90,6 +90,7 @@ class PriceService {
       const prices: PriceData = {
         bnb: bnbPrice,
         lexa: lexaPrice,
+        usdt: 1,
         lastUpdated: Date.now(),
       };
 
@@ -108,6 +109,7 @@ class PriceService {
     return {
       bnb: 0,
       lexa: 0,
+      usdt: 1,
       lastUpdated: Date.now(),
     };
   }

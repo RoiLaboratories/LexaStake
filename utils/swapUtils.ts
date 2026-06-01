@@ -12,7 +12,7 @@ import { TOKENS } from "@/constants/tokens";
 // ============================================================================
 
 const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-const WBNB_ADDRESS = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
+const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 // Minimal ABI for ERC20 token operations
 const ERC20_ABI = [

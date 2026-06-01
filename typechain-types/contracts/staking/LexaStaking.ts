@@ -75,6 +75,7 @@ export interface LexaStakingInterface extends Interface {
       | "getActiveStakeCount"
       | "getTierConfig"
       | "getTotalLockedAmount"
+      | "getUnaccountedTokenBalance"
       | "getUserStakes"
       | "hasUsedReferrer"
       | "isStakeMatured"
@@ -85,6 +86,7 @@ export interface LexaStakingInterface extends Interface {
       | "referralRewardAmount"
       | "referralRewardsClaimed"
       | "renounceOwnership"
+      | "reservedRewardBalance"
       | "restakeRewards"
       | "rewardPoolBalance"
       | "setReferralRewardAmount"
@@ -93,6 +95,7 @@ export interface LexaStakingInterface extends Interface {
       | "stakerReferrer"
       | "stakingPaused"
       | "tiers"
+      | "totalLockedPrincipal"
       | "transferOwnership"
       | "unpause"
       | "unstake"
@@ -147,6 +150,10 @@ export interface LexaStakingInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "getUnaccountedTokenBalance",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "getUserStakes",
     values: [AddressLike]
   ): string;
@@ -172,6 +179,10 @@ export interface LexaStakingInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "reservedRewardBalance",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -203,6 +214,10 @@ export interface LexaStakingInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(functionFragment: "tiers", values: [BigNumberish]): string;
+  encodeFunctionData(
+    functionFragment: "totalLockedPrincipal",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "transferOwnership",
     values: [AddressLike]
@@ -258,6 +273,10 @@ export interface LexaStakingInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "getUnaccountedTokenBalance",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getUserStakes",
     data: BytesLike
   ): Result;
@@ -286,6 +305,10 @@ export interface LexaStakingInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "reservedRewardBalance",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "restakeRewards",
     data: BytesLike
   ): Result;
@@ -311,6 +334,10 @@ export interface LexaStakingInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "tiers", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "totalLockedPrincipal",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "transferOwnership",
     data: BytesLike
@@ -656,6 +683,8 @@ export interface LexaStaking extends BaseContract {
 
   getTotalLockedAmount: TypedContractMethod<[], [bigint], "view">;
 
+  getUnaccountedTokenBalance: TypedContractMethod<[], [bigint], "view">;
+
   getUserStakes: TypedContractMethod<
     [_user: AddressLike],
     [LexaStaking.UserStakeStructOutput[]],
@@ -691,6 +720,8 @@ export interface LexaStaking extends BaseContract {
   >;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
+
+  reservedRewardBalance: TypedContractMethod<[], [bigint], "view">;
 
   restakeRewards: TypedContractMethod<
     [_stakeIndex: BigNumberish],
@@ -738,6 +769,8 @@ export interface LexaStaking extends BaseContract {
     ],
     "view"
   >;
+
+  totalLockedPrincipal: TypedContractMethod<[], [bigint], "view">;
 
   transferOwnership: TypedContractMethod<
     [newOwner: AddressLike],
@@ -822,6 +855,9 @@ export interface LexaStaking extends BaseContract {
     nameOrSignature: "getTotalLockedAmount"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "getUnaccountedTokenBalance"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "getUserStakes"
   ): TypedContractMethod<
     [_user: AddressLike],
@@ -859,6 +895,9 @@ export interface LexaStaking extends BaseContract {
   getFunction(
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "reservedRewardBalance"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "restakeRewards"
   ): TypedContractMethod<[_stakeIndex: BigNumberish], [void], "nonpayable">;
@@ -902,6 +941,9 @@ export interface LexaStaking extends BaseContract {
     ],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "totalLockedPrincipal"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;

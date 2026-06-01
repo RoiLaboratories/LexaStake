@@ -14,7 +14,14 @@ export const TOKENS: Record<string, Token> = {
     logoPath: "/assets/bnb.svg",
     decimals: 18,
     // Use wrapped BNB (WBNB) on BSC mainnet for ERC20 balance queries
-    address: "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c",
+    address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+  },
+  USDT: {
+    symbol: "USDT",
+    name: "Tether USD",
+    logoPath: "/assets/usdt.svg",
+    decimals: 18,
+    address: "0x55d398326f99059fF775485246999027B3197955",
   },
   BUSD: {
     symbol: "BUSD",
@@ -26,5 +33,7 @@ export const TOKENS: Record<string, Token> = {
   // Add more tokens as needed
 };
 
-export const DEFAULT_SLIPPAGE = "0.5"; // 15% slippage accounts for LEXA's 5% tax + volatility + fees
-export const SLIPPAGE_OPTIONS = ["0.1", "0.5", "1", "2", "5", "10"];
+export const SWAP_TOKENS = [TOKENS.LEXA, TOKENS.BNB, TOKENS.USDT];
+
+export const DEFAULT_SLIPPAGE = "10"; // LEXA/BNB requires at least 7% because of thin liquidity and token taxes.
+export const SLIPPAGE_OPTIONS = ["0.1", "0.5", "1", "2", "5", "7", "10"];

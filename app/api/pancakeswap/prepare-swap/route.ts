@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import {
-  calculatePriceImpact,
-  computeAmountOutFromReserves,
   fetchReserves,
-  validateQuoteAgainstReserves,
-  checkPoolRisk,
   validateSwapSanity,
   formatValidationErrors,
-  getTokenDecimals,
 } from "@/utils/swapValidation";
 
-const PANCAKESWAP_ROUTER_V2_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";  // For quote fetching only
-const PANCAKESWAP_UNIVERSAL_ROUTER_ADDRESS = "0xd9C500DfF816a1Da21A48A732d3498Bf09dc9AEB";  // For swap execution
-const WBNB_ADDRESS = "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c";
+const PANCAKESWAP_ROUTER_V2_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 const BSC_RPC_URLS = (() => {
   const urls: string[] = [];
@@ -37,24 +31,6 @@ const BSC_RPC_URLS = (() => {
 const BSC_NETWORK = ethers.Network.from({ chainId: 56, name: "binance" });
 const BSC_RPC_URL = BSC_RPC_URLS[0];
 
-/** Ensure address is properly formatted as 0x + 40 lowercase hex chars */
-function formatAddressForRpc(addr: string): string {
-  // Remove any whitespace
-  const trimmed = addr.trim();
-  
-  // Ensure it starts with 0x
-  const withPrefix = trimmed.startsWith("0x") ? trimmed : "0x" + trimmed;
-  
-  // Remove 0x, convert to lowercase, and ensure exactly 40 hex chars
-  const hex = withPrefix.slice(2).toLowerCase();
-  
-  if (hex.length !== 40) {
-    throw new Error(`Address must be exactly 40 hex characters (got ${hex.length}): ${addr}`);
-  }
-  
-  return "0x" + hex;
-}
-
 /** Validate and normalize address */
 function validateAddress(addr: string): string {
   if (!addr || typeof addr !== "string") {
@@ -71,7 +47,7 @@ function validateAddress(addr: string): string {
   try {
     // Use ethers.js to validate and checksum the address
     return ethers.getAddress(trimmed);
-  } catch (e) {
+  } catch {
     // If checksum fails but format is valid, just return lowercase
     return trimmed.toLowerCase();
   }
@@ -102,23 +78,23 @@ function buildSwapPath(tokenIn: string, tokenOut: string): string[] {
   return [tokenIn, WBNB_ADDRESS, tokenOut];
 }
 
-// Router ABI - for BNB→LEXA swaps (still needed, don't remove!)
+// Router ABI for native BNB buys and token-to-native-BNB sells.
 const ROUTER_ABI = [
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
   "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] amounts)",
+  "function swapExactTokensForETHSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external",
+  "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external",
 ];
 
 const ERC20_ABI = [
   "function approve(address _spender, uint256 _value) returns (bool)",
-  "function transfer(address to, uint256 amount) returns (bool)",
 ];
 
-// Pair ABI for direct swap calls (LEXA→BNB only - bypasses router)
+// Pair ABI for LEXA/BNB reserve diagnostics.
 const PAIR_ABI = [
   "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
   "function token0() view returns (address)",
   "function token1() view returns (address)",
-  "function swap(uint amount0Out, uint amount1Out, address to, bytes data) external",
 ];
 
 export async function POST(request: NextRequest) {
@@ -190,8 +166,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedTokenInLower = normalizedTokenIn.toLowerCase();
+    const normalizedTokenOutLower = normalizedTokenOut.toLowerCase();
+    const wbnbLower = WBNB_ADDRESS.toLowerCase();
+    const lexaLower = "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase();
+
     // Build path with validated addresses
-    let path = buildSwapPath(normalizedTokenIn, normalizedTokenOut);
+    const path = buildSwapPath(normalizedTokenIn, normalizedTokenOut);
     
     console.log(`Preparing swap: ${normalizedTokenIn.substring(0, 14)}... -> ${normalizedTokenOut.substring(0, 14)}... for wallet ${normalizedWalletAddress.substring(0, 14)}...`);
     console.log(`Base path (before native BNB logic): [${path.map(p => p.substring(0, 14) + "...").join(" -> ")}]`);
@@ -201,7 +182,7 @@ export async function POST(request: NextRequest) {
       try {
         const checksummed = validateAddress(addr);
         console.log(`  Path[${index}]: ${checksummed}`);
-      } catch (e) {
+      } catch {
         console.error(`  Path[${index}] INVALID:`, addr);
       }
     });
@@ -303,7 +284,7 @@ export async function POST(request: NextRequest) {
         if (reserve0Pct > 10) {
           console.warn(`   ⚠️  WARNING: Input is >10% of available reserve - may encounter significant slippage`);
         }
-      } catch (e) {
+      } catch {
         console.warn(`   ⚠️  Could not fetch reserves for additional checks`);
       }
 
@@ -354,26 +335,29 @@ export async function POST(request: NextRequest) {
 
     // Calculate minimum amount with slippage
     // Convert percentage (e.g., 6) to basis points (e.g., 600)
-    let slippagePercentage = parseFloat(slippage as string) || 0.5;
+    const slippagePercentage = parseFloat(slippage as string) || 0.5;
     
     // ⚠️  VALIDATE SLIPPAGE: Minimum 7% required for thin pairs like LEXA↔BNB
-    const isLexaBnbPair = 
-      (normalizedTokenIn === "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase() &&
-       normalizedTokenOut === WBNB_ADDRESS.toLowerCase()) ||
-      (normalizedTokenIn === WBNB_ADDRESS.toLowerCase() &&
-       normalizedTokenOut === "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase());
+    const isDirectLexaBnbPair = 
+      (normalizedTokenInLower === lexaLower &&
+       normalizedTokenOutLower === wbnbLower) ||
+      (normalizedTokenInLower === wbnbLower &&
+       normalizedTokenOutLower === lexaLower);
+    const isLexaRoute =
+      normalizedTokenInLower === lexaLower ||
+      normalizedTokenOutLower === lexaLower;
     
     const isLexaToBnb = 
-      normalizedTokenIn === "0x6fc20e595A8704725DBd160E7c799665706e0bdD".toLowerCase() &&
-      normalizedTokenOut === WBNB_ADDRESS.toLowerCase();
+      normalizedTokenInLower === lexaLower &&
+      normalizedTokenOutLower === wbnbLower;
     
-    if (isLexaBnbPair && slippagePercentage < 7) {
+    if (isLexaRoute && slippagePercentage < 7) {
       console.error(`\n❌ SLIPPAGE TOO LOW FOR THIN PAIR`);
-      console.error(`   Pair: ${isLexaToBnb ? "LEXA→BNB" : "BNB→LEXA"}`);
+      console.error(`   Pair: ${isDirectLexaBnbPair ? (isLexaToBnb ? "LEXA to BNB" : "BNB to LEXA") : "LEXA routed through WBNB"}`);
       console.error(`   Current slippage: ${slippagePercentage}%`);
       console.error(`   Minimum required: 7% (due to thin liquidity)`);
       console.error(`   User action: Please increase slippage in the UI to 7% or higher`);
-      throw new Error(`SLIPPAGE_TOO_LOW: This pair requires minimum 7% slippage. Please increase slippage to 7% or higher and try again.`);
+      throw new Error(`SLIPPAGE_TOO_LOW: This LEXA route requires minimum 7% slippage. Please increase slippage to 7% or higher and try again.`);
     }
     
     const slippageBps = Math.round(slippagePercentage * 100);
@@ -395,11 +379,11 @@ export async function POST(request: NextRequest) {
     // On thin/volatile pairs, pool reserves can shift between quote and execution
     // This extra buffer prevents "Pancake: K" errors from minor drift
     // LEXA is an extremely volatile pair - needs aggressive buffering
-    const volatilityBufferBps = isLexaBnbPair ? 300 : 50; // 3% for LEXA↔BNB (very volatile), 0.5% for others
+    const volatilityBufferBps = isLexaRoute ? 300 : 50; // 3% for LEXA routes (very volatile), 0.5% for others
     const driftAdjustedMinOut = (minimumAmountOutWei * BigInt(10000 - volatilityBufferBps)) / BigInt(10000);
     
     console.log(`\n🌊 VOLATILITY DRIFT BUFFER:`);
-    console.log(`   Pair: ${isLexaBnbPair ? "LEXA↔BNB (EXTREMELY volatile)" : "Standard pair"}`);
+    console.log(`   Pair: ${isLexaRoute ? "LEXA route (EXTREMELY volatile)" : "Standard pair"}`);
     console.log(`   Base slippage: ${slippagePercentage}%`);
     console.log(`   Volatility buffer: ${volatilityBufferBps / 100}%`);
     console.log(`   minOut before drift: ${ethers.formatEther(minimumAmountOutWei)}`);
@@ -486,8 +470,8 @@ export async function POST(request: NextRequest) {
       ? ((expectedAmount - minimumAmount) / expectedAmount * 100).toFixed(3)
       : "N/A (debug mode)";
     console.log(`\n✅ SLIPPAGE VERIFICATION:`);
-    console.log(`  Expected Output: ${ethers.formatEther(amountOutWei)} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
-    console.log(`  Minimum Output (after ${slippagePercentage}% slippage): ${minimumAmountOutEther} ${normalizedTokenOut === WBNB_ADDRESS.toLowerCase() ? "BNB" : "tokens"}`);
+    console.log(`  Expected Output: ${ethers.formatEther(amountOutWei)} ${normalizedTokenOutLower === wbnbLower ? "BNB" : "tokens"}`);
+    console.log(`  Minimum Output (after ${slippagePercentage}% slippage): ${minimumAmountOutEther} ${normalizedTokenOutLower === wbnbLower ? "BNB" : "tokens"}`);
     if (minimumAmount > 0 || !DEBUG_MODE) {
       console.log(`  Reduction: ${(expectedAmount - minimumAmount).toFixed(6)} tokens (~${totalReduction}%)`);
     } else {
@@ -496,8 +480,7 @@ export async function POST(request: NextRequest) {
 
     // Warn if minimum output is suspiciously low
     const amountOutNum = parseFloat(ethers.formatEther(amountOutWei));
-    const minimumOutNum = parseFloat(minimumAmountOutEther);
-    if (amountOutNum < 1 && normalizedTokenOut !== WBNB_ADDRESS.toLowerCase() && !DEBUG_MODE) {
+    if (amountOutNum < 1 && normalizedTokenOutLower !== wbnbLower && !DEBUG_MODE) {
       console.warn(`⚠️  WARNING: Very low token output (${amountOutNum.toFixed(2)} tokens)`);
       console.warn(`    This suggests: small input, low liquidity, or token transfer tax`);
     }
@@ -524,7 +507,7 @@ export async function POST(request: NextRequest) {
     let txValue = "0";
 
     const isBNBInput = fromNativeBNB === true;
-    const isBNBOutput = normalizedTokenOut === WBNB_ADDRESS.toLowerCase();
+    const isBNBOutput = normalizedTokenOutLower === wbnbLower;
     
     // Build the swap path based on input/output direction
     let swapPath: string[];
@@ -548,18 +531,12 @@ export async function POST(request: NextRequest) {
     if (!isBNBInput && isBNBOutput) {
       console.log(`\n🔍 [DIAGNOSTIC] LEXA→BNB Reserve Analysis`);
       try {
-        const PAIR_ABI = [
-          "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32)",
-          "function token0() view returns (address)",
-          "function token1() view returns (address)",
-        ];
         const LEXA_PAIR = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
         const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
         const pair = new ethers.Contract(LEXA_PAIR, PAIR_ABI, provider);
         
         const [r0, r1] = await pair.getReserves();
         const t0 = await pair.token0();
-        const t1 = await pair.token1();
         
         console.log(`   Pair Address: ${LEXA_PAIR}`);
         
@@ -599,9 +576,8 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Create Router V2 and Pair interfaces
+    // Create Router V2 and ERC20 interfaces
     const routerIface = new ethers.Interface(ROUTER_ABI);
-    const pairIface = new ethers.Interface(PAIR_ABI);
     const erc20Iface = new ethers.Interface(ERC20_ABI);
     
     if (isBNBInput) {
@@ -631,124 +607,79 @@ export async function POST(request: NextRequest) {
       
       txValue = amountInWei.toString();
     } else if (isBNBOutput) {
-      // Token input, BNB output (LEXA→BNB): Use DIRECT PAIR SWAP
-      console.log(`\n📝 EXECUTION: Direct Pair Swap (LEXA→WBNB→BNB)`);
-      console.log(`   This uses direct pair contract calls instead of router`);
-      
-      // Step 1: Determine pair contract and token order
-      const LEXA_PAIR = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
-      const pairContract = LEXA_PAIR; // LEXA/WBNB pair
-      
-      // Get token order in pair (token0 vs token1)
-      const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
-      const pairContractInstance = new ethers.Contract(
-        pairContract,
-        PAIR_ABI,
-        provider
-      );
-      
-      const token0 = await pairContractInstance.token0();
-      const token1 = await pairContractInstance.token1();
-      
-      console.log(`   Pair: ${pairContract}`);
-      console.log(`   token0: ${token0.substring(0, 14)}... (${token0.toLowerCase() === normalizedTokenIn.toLowerCase() ? "LEXA" : "WBNB"})`);
-      console.log(`   token1: ${token1.substring(0, 14)}... (${token1.toLowerCase() === normalizedTokenIn.toLowerCase() ? "LEXA" : "WBNB"})`);
-      
-      // Determine amount0Out and amount1Out based on token order
-      let amount0Out: bigint;
-      let amount1Out: bigint;
-      
-      if (token0.toLowerCase() === normalizedTokenIn.toLowerCase()) {
-        // LEXA is token0, WBNB is token1
-        amount0Out = BigInt(0); // No token0 (LEXA) output
-        amount1Out = minimumAmountOutWei; // WBNB output
-        console.log(`   amount0Out (LEXA): 0`);
-        console.log(`   amount1Out (WBNB): ${ethers.formatEther(minimumAmountOutWei)}`);
-      } else {
-        // WBNB is token0, LEXA is token1
-        amount0Out = minimumAmountOutWei; // WBNB output
-        amount1Out = BigInt(0); // No token1 (LEXA) output
-        console.log(`   amount0Out (WBNB): ${ethers.formatEther(minimumAmountOutWei)}`);
-        console.log(`   amount1Out (LEXA): 0`);
-      }
-      
-      // Encode the pair.swap() call
-      console.log(`\n   Step 2: Encode pair.swap() call`);
-      console.log(`     - amount0Out: ${amount0Out.toString()}`);
-      console.log(`     - amount1Out: ${amount1Out.toString()}`);
+      // Token input, native BNB output (LEXA -> BNB): use Router V2.
+      // The supporting-fee function is safer for taxed/fee-on-transfer tokens.
+      console.log(`\nFUNCTION: swapExactTokensForETHSupportingFeeOnTransferTokens (Router V2)`);
+      console.log(`   Parameters:`);
+      console.log(`     - amountIn: ${ethers.formatEther(amountInWei)} (${amountInWei.toString()} wei)`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} (${minimumAmountOutWei.toString()} wei)`);
+      console.log(`     - path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" -> ")}]`);
       console.log(`     - to: ${normalizedWalletAddress}`);
-      console.log(`     - data: 0x (no callback)`);
-      
-      swapData = pairIface.encodeFunctionData("swap", [
-        amount0Out,
-        amount1Out,
-        normalizedWalletAddress,
-        "0x", // No callback data needed
-      ]);
-      
-      console.log(`\n✓ Pair.swap() encoded successfully`);
+      console.log(`     - deadline: ${deadline}`);
+
+      swapData = routerIface.encodeFunctionData(
+        "swapExactTokensForETHSupportingFeeOnTransferTokens",
+        [
+          amountInWei,
+          minimumAmountOutWei,
+          swapPath,
+          normalizedWalletAddress,
+          deadline,
+        ],
+      );
+
+      console.log(`\nRouter V2 swapExactTokensForETHSupportingFeeOnTransferTokens() encoded successfully`);
       console.log(`  Function selector: ${swapData.substring(0, 10)}`);
       console.log(`  Encoded data length: ${swapData.length} chars`);
-      console.log(`  💾 SWAP TRANSACTION DETAILS:`);
-      console.log(`     - to: Pair ${LEXA_PAIR}`);
-      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)}`);
-      
-      // Step 3: Encode token transfer to pair (REQUIRED before swap)
-      console.log(`\n   Step 3: Encode transfer to pair (MUST execute before swap!)`);
-      const transferData = erc20Iface.encodeFunctionData("transfer", [
-        LEXA_PAIR,
-        amountInWei.toString(),
-      ]);
-      
-      console.log(`\n✓ Transfer encoded successfully`);
-      console.log(`  Target: LEXA token ${normalizedTokenIn}`);
-      console.log(`  Recipient: Pair ${LEXA_PAIR}`);
-      console.log(`  Amount: ${ethers.formatEther(amountInWei)} LEXA`);
-      console.log(`  Function selector: ${transferData.substring(0, 10)}`);
+      console.log(`  TRANSACTION DETAILS:`);
+      console.log(`     - to: Router V2 ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
+      console.log(`     - value: 0`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} BNB`);
+      console.log(`     - deadline: ${deadline}`);
     } else {
-      // Token → Token: Not yet supported
-      console.log(`\n⚠️  Token→Token swaps not yet supported`);
-      throw new Error("Token→Token swaps not yet implemented");
+      // Token input, token output (USDT -> LEXA or LEXA -> USDT): use Router V2.
+      // The supporting-fee function is safer when LEXA is part of the route.
+      console.log(`\nFUNCTION: swapExactTokensForTokensSupportingFeeOnTransferTokens (Router V2)`);
+      console.log(`   Parameters:`);
+      console.log(`     - amountIn: ${ethers.formatEther(amountInWei)} (${amountInWei.toString()} wei)`);
+      console.log(`     - amountOutMin: ${ethers.formatEther(minimumAmountOutWei)} (${minimumAmountOutWei.toString()} wei)`);
+      console.log(`     - path: [${swapPath.map(p => p.substring(0, 14) + "...").join(" -> ")}]`);
+      console.log(`     - to: ${normalizedWalletAddress}`);
+      console.log(`     - deadline: ${deadline}`);
+
+      swapData = routerIface.encodeFunctionData(
+        "swapExactTokensForTokensSupportingFeeOnTransferTokens",
+        [
+          amountInWei,
+          minimumAmountOutWei,
+          swapPath,
+          normalizedWalletAddress,
+          deadline,
+        ],
+      );
+
+      console.log(`\nRouter V2 swapExactTokensForTokensSupportingFeeOnTransferTokens() encoded successfully`);
+      console.log(`  Function selector: ${swapData.substring(0, 10)}`);
+      console.log(`  Encoded data length: ${swapData.length} chars`);
+      console.log(`  TRANSACTION DETAILS:`);
+      console.log(`     - to: Router V2 ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
+      console.log(`     - value: 0`);
+      console.log(`     - deadline: ${deadline}`);
     }
 
-    // For token input, we need approval based on swap type
+    // For token input, approve Router V2 to spend the input token.
     let approvalData = null;
     let approvalTarget = null;
-    let transferData_DirectPair = null;
     
     if (!isBNBInput) {
-      if (isBNBOutput) {
-        // LEXA→BNB (Direct Pair): Approve the PAIR contract to pull tokens
-        const LEXA_PAIR = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
-        approvalTarget = LEXA_PAIR;
-        
-        approvalData = erc20Iface.encodeFunctionData("approve", [
-          LEXA_PAIR,
-          amountInWei.toString(),
-        ]);
-        console.log(`\n✓ Will request approval for PAIR: ${LEXA_PAIR.substring(0, 14)}...`);
-        console.log(`  Token: ${normalizedTokenIn.substring(0, 14)}...`);
-        console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
-        
-        // For direct pair swaps, we also need a transfer transaction
-        transferData_DirectPair = erc20Iface.encodeFunctionData("transfer", [
-          LEXA_PAIR,
-          amountInWei.toString(),
-        ]);
-        console.log(`\n✓ Will also perform direct transfer to pair`);
-        console.log(`  Transfer target: ${LEXA_PAIR.substring(0, 14)}...`);
-        console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
-      } else {
-        // Other token swaps: Approve Router V2
-        approvalTarget = PANCAKESWAP_ROUTER_V2_ADDRESS;
-        approvalData = erc20Iface.encodeFunctionData("approve", [
-          PANCAKESWAP_ROUTER_V2_ADDRESS,
-          amountInWei.toString(),
-        ]);
-        console.log(`\n✓ Will request approval for Router V2: ${PANCAKESWAP_ROUTER_V2_ADDRESS.substring(0, 14)}...`);
-        console.log(`  Token: ${normalizedTokenIn.substring(0, 14)}...`);
-        console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
-      }
+      approvalTarget = PANCAKESWAP_ROUTER_V2_ADDRESS;
+      approvalData = erc20Iface.encodeFunctionData("approve", [
+        PANCAKESWAP_ROUTER_V2_ADDRESS,
+        amountInWei.toString(),
+      ]);
+      console.log(`\nWill request approval for Router V2: ${PANCAKESWAP_ROUTER_V2_ADDRESS.substring(0, 14)}...`);
+      console.log(`  Token: ${normalizedTokenIn.substring(0, 14)}...`);
+      console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
     }
 
     console.log(`\n✅ [PREPARE-SWAP] FINAL RESPONSE`);
@@ -759,8 +690,11 @@ export async function POST(request: NextRequest) {
       functionName = "swapExactETHForTokens (Router V2)";
       targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
     } else if (isBNBOutput) {
-      functionName = "pair.swap() (Direct Pair)";
-      targetAddress = "0x3027f7b11AB243A1efe3F997430fca5996276E63";
+      functionName = "swapExactTokensForETHSupportingFeeOnTransferTokens (Router V2)";
+      targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
+    } else {
+      functionName = "swapExactTokensForTokensSupportingFeeOnTransferTokens (Router V2)";
+      targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
     }
     
     console.log(`   Function: ${functionName}`);
@@ -768,10 +702,10 @@ export async function POST(request: NextRequest) {
     console.log(`   Swap data length: ${swapData.length} chars`);
     console.log(`   Transaction value: ${isBNBInput ? ethers.formatEther(txValue) + " BNB" : "0"}`);
 
-    // Build response - now with correct swap target based on execution type
-    const response: any = {
+    // Build response - all supported swaps execute through Router V2.
+    const response = {
       swap: {
-        to: isBNBInput ? PANCAKESWAP_ROUTER_V2_ADDRESS : "0x3027f7b11AB243A1efe3F997430fca5996276E63",
+        to: PANCAKESWAP_ROUTER_V2_ADDRESS,
         data: swapData,
         value: isBNBInput ? txValue : "0",  // Only for BNB input
       },
@@ -779,11 +713,7 @@ export async function POST(request: NextRequest) {
         to: normalizedTokenIn,
         data: approvalData,
       } : null,
-      // For direct pair swaps, we need a transfer transaction before swap
-      transfer: transferData_DirectPair ? {
-        to: normalizedTokenIn,
-        data: transferData_DirectPair,
-      } : null,
+      transfer: null,
       details: {
         amountIn,
         amountOut: ethers.formatEther(amountOutWei),
@@ -796,12 +726,12 @@ export async function POST(request: NextRequest) {
         deadline,
         isBNBInput,
         slippage: slippagePercentage,
-        executionType: isBNBInput ? "router" : isBNBOutput ? "directPair" : "unknown",
+        executionType: "router",
       },
     };
 
     console.log(`\n📤 RESPONSE SUMMARY:`);
-    console.log(`   Execution type: ${isBNBInput ? "Router V2" : isBNBOutput ? "Direct Pair" : "Unknown"}`);
+    console.log(`   Execution type: Router V2`);
     console.log(`   Has approval: ${!!response.approval}`);
     console.log(`   Has transfer: ${!!response.transfer}`);
     console.log(`   Input type: ${isBNBInput ? "Native BNB" : "Token"}`);
@@ -815,10 +745,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    const isUserFixableError =
+      details.includes("SLIPPAGE_TOO_LOW") ||
+      details.includes("No liquidity") ||
+      details.includes("Output amount too low") ||
+      details.includes("Slippage");
+
     console.error("Error preparing swap transaction:", error);
     return NextResponse.json(
-      { error: "Failed to prepare swap transaction", details: (error as Error).message },
-      { status: 500 },
+      {
+        error: isUserFixableError ? details : "Failed to prepare swap transaction",
+        details,
+      },
+      { status: isUserFixableError ? 400 : 500 },
     );
   }
 }

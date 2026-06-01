@@ -107,7 +107,7 @@ window.swapDebug = {
       if (!debug) return;
       
       const payload = {
-        tokenIn: "0xbb4CdB9CBD36B01bD1cBaebF2De08d9173bc095c", // WBNB
+        tokenIn: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", // WBNB
         tokenOut: "0x6fc20e595A8704725DBd160E7c799665706e0bdD", // LEXA
         amountIn,
         slippage: 1,

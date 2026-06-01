@@ -113,14 +113,10 @@ class SwapService {
       const { balance } = await response.json();
 
       // Determine token symbol based on address
-      let tokenSymbol = "TOKEN";
-      if (tokenAddress.toLowerCase() === TOKENS.LEXA.address.toLowerCase()) {
-        tokenSymbol = "LEXA";
-      } else if (
-        tokenAddress.toLowerCase() === TOKENS.BNB.address.toLowerCase()
-      ) {
-        tokenSymbol = "BNB";
-      }
+      const matchedToken = Object.values(TOKENS).find(
+        (token) => token.address.toLowerCase() === tokenAddress.toLowerCase(),
+      );
+      const tokenSymbol = matchedToken?.symbol ?? "TOKEN";
 
       return {
         token: tokenSymbol,
@@ -152,17 +148,22 @@ class SwapService {
         throw new Error("Failed to fetch balances");
       }
 
-      const { lexa, bnb } = await response.json();
+      const { lexa, bnb, usdt } = await response.json();
 
       return [
         {
           token: "BNB",
-          balance: bnb,
+          balance: bnb ?? "0",
           usdValue: "0",
         },
         {
           token: "LEXA",
-          balance: lexa,
+          balance: lexa ?? "0",
+          usdValue: "0",
+        },
+        {
+          token: "USDT",
+          balance: usdt ?? "0",
           usdValue: "0",
         },
       ];

@@ -348,7 +348,7 @@ export default function StakeDetailPage() {
               tier: tierName,
               lock_period: durationDays,
               roi_percentage: roiPercentage,
-              start_time: Math.floor(Date.now() / 1000),
+              start_time: stakeDetails.startTimestamp,
               lock_end_time: stakeDetails.lockEndTime,
               tx_hash: result.hash,
             },
@@ -591,7 +591,7 @@ export default function StakeDetailPage() {
                 <p className="text-gray-400 text-sm mb-4 leading-relaxed">
                   Staked {parseFloat(displayedStakeAmount).toLocaleString()} LEXA for{" "}
                   {duration === "90d" ? "90" : "180"} days to get {currentROI}%
-                  ROI claimable daily
+                  ROI claimable after the lock period
                 </p>
                 <a
                   href={`https://bscscan.com/tx/${transactionHash}`}

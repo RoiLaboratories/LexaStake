@@ -363,14 +363,16 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                           type="button"
                           data-action="claim"
                           onClick={(e) => handleClaimClick(stake, e)}
-                          disabled={transactionLoading === stake.stake_index}
+                          disabled={!isUnlocked(stake.start_time, stake.lock_period) || transactionLoading === stake.stake_index}
                           className={`px-2 py-1.5 rounded-lg transition-all text-xs font-semibold whitespace-nowrap ${
                             transactionLoading === stake.stake_index && transactionAction === 'claim'
                               ? "bg-yellow-600 text-black cursor-wait"
-                              : transactionStatus[stake.stake_index] === 'success'
+                            : transactionStatus[stake.stake_index] === 'success'
                               ? "bg-green-500 text-white"
-                              : transactionStatus[stake.stake_index] === 'error'
+                            : transactionStatus[stake.stake_index] === 'error'
                               ? "bg-red-500 text-white hover:bg-red-600"
+                            : !isUnlocked(stake.start_time, stake.lock_period)
+                              ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                               : "bg-yellow-500 hover:bg-yellow-600 text-black"
                           }`}
                         >
@@ -380,14 +382,16 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                           type="button"
                           data-action="restake"
                           onClick={(e) => handleRestakeClick(stake, e)}
-                          disabled={transactionLoading === stake.stake_index}
+                          disabled={!isUnlocked(stake.start_time, stake.lock_period) || transactionLoading === stake.stake_index}
                           className={`px-2 py-1.5 rounded-lg transition-all text-xs font-semibold whitespace-nowrap ${
                             transactionLoading === stake.stake_index && transactionAction === 'restake'
                               ? "bg-purple-700 text-white cursor-wait"
-                              : transactionStatus[stake.stake_index] === 'success'
+                            : transactionStatus[stake.stake_index] === 'success'
                               ? "bg-green-500 text-white"
-                              : transactionStatus[stake.stake_index] === 'error'
+                            : transactionStatus[stake.stake_index] === 'error'
                               ? "bg-red-500 text-white hover:bg-red-600"
+                            : !isUnlocked(stake.start_time, stake.lock_period)
+                              ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                               : "bg-purple-600 hover:bg-purple-700 text-white"
                           }`}
                         >
@@ -500,14 +504,16 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                     type="button"
                     data-action="claim"
                     onClick={(e) => handleClaimClick(stake, e)}
-                    disabled={transactionLoading === stake.stake_index}
+                    disabled={!isUnlocked(stake.start_time, stake.lock_period) || transactionLoading === stake.stake_index}
                     className={`flex-1 px-3 py-2 rounded-lg transition-all text-sm font-semibold ${
                       transactionLoading === stake.stake_index && transactionAction === 'claim'
                         ? "bg-yellow-600 text-black cursor-wait"
-                        : transactionStatus[stake.stake_index] === 'success'
+                      : transactionStatus[stake.stake_index] === 'success'
                         ? "bg-green-500 text-white"
-                        : transactionStatus[stake.stake_index] === 'error'
+                      : transactionStatus[stake.stake_index] === 'error'
                         ? "bg-red-500 text-white hover:bg-red-600"
+                      : !isUnlocked(stake.start_time, stake.lock_period)
+                        ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                         : "bg-yellow-500 hover:bg-yellow-600 text-black"
                     }`}
                   >
@@ -517,14 +523,16 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
                     type="button"
                     data-action="restake"
                     onClick={(e) => handleRestakeClick(stake, e)}
-                    disabled={transactionLoading === stake.stake_index}
+                    disabled={!isUnlocked(stake.start_time, stake.lock_period) || transactionLoading === stake.stake_index}
                     className={`flex-1 px-3 py-2 rounded-lg transition-all text-sm font-semibold ${
                       transactionLoading === stake.stake_index && transactionAction === 'restake'
                         ? "bg-purple-700 text-white cursor-wait"
-                        : transactionStatus[stake.stake_index] === 'success'
+                      : transactionStatus[stake.stake_index] === 'success'
                         ? "bg-green-500 text-white"
-                        : transactionStatus[stake.stake_index] === 'error'
+                      : transactionStatus[stake.stake_index] === 'error'
                         ? "bg-red-500 text-white hover:bg-red-600"
+                      : !isUnlocked(stake.start_time, stake.lock_period)
+                        ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                         : "bg-purple-600 hover:bg-purple-700 text-white"
                     }`}
                   >

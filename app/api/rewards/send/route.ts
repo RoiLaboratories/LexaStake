@@ -1,21 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ethers } from 'ethers';
 import { getSwapRewardsSignerConfig } from '@/utils/contractConfig';
+import { TOKENS } from '@/constants/tokens';
+
+const ERC20_REWARD_ABI = [
+  'function decimals() view returns (uint8)',
+  'function balanceOf(address) view returns (uint256)',
+  'function transfer(address to, uint256 amount) returns (bool)',
+];
+
+function parseDecimalUnits(amount: string, decimals: number) {
+  const trimmed = amount.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
+    throw new Error('Invalid amount');
+  }
+
+  const [whole, fraction = ''] = trimmed.split('.');
+  const normalized =
+    decimals === 0
+      ? whole
+      : `${whole}.${fraction.slice(0, decimals).padEnd(decimals, '0')}`;
+  const units = ethers.parseUnits(normalized, decimals);
+
+  return {
+    units,
+    normalized: ethers.formatUnits(units, decimals),
+  };
+}
 
 /**
  * POST /api/rewards/send
- * Send 2% BNB reward to referrer after swap
+ * Send 2% reward to referrer after swap
  * 
  * Body: {
  *   referrer: "0x...",
  *   swapper: "0x...",
- *   amount: "0.02",  // in BNB
- *   txHash: "0x..."  // swap tx hash
+ *   amount: "0.02",
+ *   txHash: "0x...",  // swap tx hash
+ *   rewardToken: "BNB" | "USDT",
+ *   tokenAddress: "0x..." // required for BEP20 rewards unless token is known
  * }
  */
 export async function POST(request: NextRequest) {
   try {
-    const { referrer, swapper, amount, txHash } = await request.json();
+    const {
+      referrer,
+      swapper,
+      amount,
+      txHash,
+      rewardToken = 'BNB',
+      tokenAddress,
+    } = await request.json();
+    const normalizedRewardToken = String(rewardToken).toUpperCase();
 
     // Validate inputs
     if (!referrer || !ethers.isAddress(referrer)) {
@@ -46,6 +82,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!['BNB', 'USDT'].includes(normalizedRewardToken)) {
+      return NextResponse.json(
+        { success: false, error: 'Unsupported reward token' },
+        { status: 400 }
+      );
+    }
+
     // Get contract details
     const config = getSwapRewardsSignerConfig();
     if (!config.ok) {
@@ -60,6 +103,79 @@ export async function POST(request: NextRequest) {
     const provider = new ethers.JsonRpcProvider(config.rpcUrl);
     const owner = new ethers.Wallet(config.privateKey, provider);
 
+    if (normalizedRewardToken === 'USDT') {
+      const resolvedTokenAddress = tokenAddress || TOKENS.USDT.address;
+      if (!ethers.isAddress(resolvedTokenAddress)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid reward token address' },
+          { status: 400 }
+        );
+      }
+
+      if (resolvedTokenAddress.toLowerCase() !== TOKENS.USDT.address.toLowerCase()) {
+        return NextResponse.json(
+          { success: false, error: 'Unsupported reward token address' },
+          { status: 400 }
+        );
+      }
+
+      const tokenContract = new ethers.Contract(
+        resolvedTokenAddress,
+        ERC20_REWARD_ABI,
+        owner
+      );
+      const decimals = Number(await tokenContract.decimals());
+      const { units: amountUnits, normalized: normalizedAmount } =
+        parseDecimalUnits(String(amount), decimals);
+      if (amountUnits <= BigInt(0)) {
+        return NextResponse.json(
+          { success: false, error: 'Amount must be greater than zero' },
+          { status: 400 }
+        );
+      }
+
+      console.log(`Sending ${normalizedAmount} ${normalizedRewardToken} reward to ${referrer}`);
+      console.log(`Token: ${resolvedTokenAddress}`);
+      console.log(`Signer: ${owner.address}`);
+
+      const ownerBalance = await tokenContract.balanceOf(owner.address);
+      console.log(`Distributor ${normalizedRewardToken} Balance: ${ethers.formatUnits(ownerBalance, decimals)}`);
+
+      if (ownerBalance < amountUnits) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Distributor insufficient ${normalizedRewardToken} balance: ${ethers.formatUnits(ownerBalance, decimals)} ${normalizedRewardToken} (need ${normalizedAmount} ${normalizedRewardToken}).`,
+            distributorBalance: ethers.formatUnits(ownerBalance, decimals),
+            requiredAmount: normalizedAmount,
+          },
+          { status: 400 }
+        );
+      }
+
+      const tx = await tokenContract.transfer(referrer, amountUnits);
+      const receipt = await tx.wait();
+
+      if (!receipt) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Transaction failed - no receipt returned',
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(`USDT reward sent on block ${receipt.blockNumber}, tx: ${receipt.hash}`);
+
+      return NextResponse.json({
+        success: true,
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        rewardToken: normalizedRewardToken,
+      });
+    }
+
     // Contract ABI
     const abi = [
       'function sendReward(address _referrer, address _swapper, uint256 _amount, string _txHash) external',
@@ -67,10 +183,14 @@ export async function POST(request: NextRequest) {
 
     const contract = new ethers.Contract(config.contractAddress, abi, owner);
 
-    // Convert amount to wei - normalize to avoid floating point precision errors
-    const amountNum = parseFloat(amount);
-    const normalizedAmount = amountNum.toFixed(18); // Limit to 18 decimal places
-    const amountWei = ethers.parseEther(normalizedAmount);
+    const { units: amountWei, normalized: normalizedAmount } =
+      parseDecimalUnits(String(amount), 18);
+    if (amountWei <= BigInt(0)) {
+      return NextResponse.json(
+        { success: false, error: 'Amount must be greater than zero' },
+        { status: 400 }
+      );
+    }
 
     console.log(`💰 Sending ${normalizedAmount} BNB reward to ${referrer}`);
     console.log(`📍 Contract: ${config.contractAddress}`);
@@ -101,7 +221,7 @@ export async function POST(request: NextRequest) {
       if (ownerAddress !== owner.address && ownerAddress !== 'Unknown') {
         console.warn(`⚠️  Signer ${owner.address} is not the owner ${ownerAddress}`);
       }
-    } catch (e) {
+    } catch {
       console.log('ℹ️ Could not verify owner (contract may not have owner() function)');
     }
 

@@ -49,7 +49,7 @@ export type UseSwapReturn = {
   transactionStatus: TransactionStatus;
   balance: string;
   isLoadingQuote: boolean;
-  prices: { bnb: number; lexa: number };
+  prices: { bnb: number; lexa: number; usdt: number };
   errorMessage: string | null;
   transactionHash: string | null;
   lastTransactionSellAmount: string;

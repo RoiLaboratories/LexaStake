@@ -1,7 +1,9 @@
 "use client";
 import { motion } from "framer-motion";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { Settings, ArrowDownUp, RefreshCw } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ethers } from "ethers";
 import StakeHeader from "@/components/StakeHeader";
 import { swapService } from "@/services/swap.service";
 import { supabaseService } from "@/services/supabase.service";
@@ -11,8 +13,48 @@ import { useSwap } from "@/hooks/useSwap";
 import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
 import SwapInput from "@/components/swapInput";
+import TokenIcon from "@/components/TokenIcon";
+import { SWAP_TOKENS, TOKENS } from "@/constants/tokens";
+import { Token } from "@/types/swap.types";
 import { usePrivy, User } from "@privy-io/react-auth";
-import { TOKENS } from "@/constants/tokens";
+
+const REFERRAL_REWARD_INPUT_TOKENS = new Set(["BNB", "USDT"]);
+
+function getTokenPrice(
+  tokenSymbol: string,
+  prices: { bnb: number; lexa: number; usdt: number },
+): number {
+  if (tokenSymbol === "BNB") return prices.bnb;
+  if (tokenSymbol === "USDT") return prices.usdt;
+  return prices.lexa;
+}
+
+function calculateReferralRewardAmount(amount: string, decimals: number): string {
+  const amountUnits = ethers.parseUnits(amount || "0", decimals);
+  return ethers.formatUnits((amountUnits * BigInt(2)) / BigInt(100), decimals);
+}
+
+interface TokenMenuProps {
+  onSelect: (token: Token) => void;
+}
+
+function TokenMenu({ onSelect }: TokenMenuProps) {
+  return (
+    <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-44 overflow-hidden rounded-xl border border-gray-700 bg-[#151617] shadow-xl">
+      {SWAP_TOKENS.map((token) => (
+        <button
+          key={token.symbol}
+          type="button"
+          onClick={() => onSelect(token)}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+        >
+          <TokenIcon token={token} />
+          {token.symbol}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function extractWalletAddress(user: User | null): string | null {
   if (!user) return null;
@@ -30,13 +72,18 @@ interface SwapPageClientProps {
   referrer?: string;
 }
 
+type SwapDebugWindow = Window & typeof globalThis & {
+  testSwapConsole?: () => void;
+};
+
 export function SwapPageClient({ referrer }: SwapPageClientProps) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [referralAddress, setReferralAddress] = useState<string | null>(referrer || null);
+  const referralAddress = referrer || null;
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [sellTokenBalance, setSellTokenBalance] = useState<string | null>(null);
   const [receiveTokenBalance, setReceiveTokenBalance] = useState<string | null>(null);
+  const [openTokenMenu, setOpenTokenMenu] = useState<"sell" | "receive" | null>(null);
 
   const { authenticated, user, login } = usePrivy();
 
@@ -55,7 +102,7 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     window.addEventListener("unhandledrejection", handleRejection);
     
     // Expose test function to window for manual testing
-    (window as any).testSwapConsole = () => {
+    (window as SwapDebugWindow).testSwapConsole = () => {
       console.log("🧪 [TEST] CONSOLE TEST - You clicked the test function!");
       console.warn("✓ Console is working and can receive your input");
     };
@@ -74,7 +121,6 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     receiveAmount,
     slippage,
     customSlippage,
-    quote,
     transactionStatus,
     balance,
     isLoadingQuote,
@@ -85,6 +131,8 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     lastTransactionReceiveAmount,
     lastTransactionSellToken,
     lastTransactionReceiveToken,
+    setSellToken,
+    setReceiveToken,
     setSellAmount,
     setReceiveAmount,
     setSlippage,
@@ -97,6 +145,72 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     resetTransaction,
     updateBalance,
   } = useSwap();
+
+  const refreshWalletBalances = useCallback(async () => {
+    if (!authenticated || !walletAddress) return;
+
+    try {
+      // Single API call for swap token balances (uses Alchemy first when configured)
+      const allBalances = await swapService.getAllBalances(walletAddress);
+      const balancesByToken = new Map(
+        allBalances.map((entry) => [entry.token, entry.balance]),
+      );
+      const currentSellBalance = balancesByToken.get(sellToken.symbol) ?? "0";
+      const currentReceiveBalance = balancesByToken.get(receiveToken.symbol) ?? "0";
+
+      setSellTokenBalance(currentSellBalance);
+      setReceiveTokenBalance(currentReceiveBalance);
+      updateBalance(currentSellBalance);
+    } catch (error) {
+      console.error("Error fetching balances:", error);
+    }
+  }, [
+    authenticated,
+    walletAddress,
+    sellToken.symbol,
+    receiveToken.symbol,
+    updateBalance,
+  ]);
+
+  const clearTokenAmounts = useCallback(() => {
+    setSellAmount("");
+    setReceiveAmount("");
+    setSellTokenBalance(null);
+    setReceiveTokenBalance(null);
+    updateBalance("0");
+  }, [setSellAmount, setReceiveAmount, updateBalance]);
+
+  const handleSellTokenSelect = useCallback(
+    (token: Token) => {
+      setSellToken(token);
+      setReceiveToken(
+        token.symbol === "LEXA"
+          ? receiveToken.symbol === "LEXA"
+            ? TOKENS.BNB
+            : receiveToken
+          : TOKENS.LEXA,
+      );
+      clearTokenAmounts();
+      setOpenTokenMenu(null);
+    },
+    [clearTokenAmounts, receiveToken, setReceiveToken, setSellToken],
+  );
+
+  const handleReceiveTokenSelect = useCallback(
+    (token: Token) => {
+      setReceiveToken(token);
+      setSellToken(
+        token.symbol === "LEXA"
+          ? sellToken.symbol === "LEXA"
+            ? TOKENS.BNB
+            : sellToken
+          : TOKENS.LEXA,
+      );
+      clearTokenAmounts();
+      setOpenTokenMenu(null);
+    },
+    [clearTokenAmounts, sellToken, setReceiveToken, setSellToken],
+  );
 
   // Connect wallet handler using Privy
   const handleConnect = async () => {
@@ -111,7 +225,6 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
   useEffect(() => {
     const addr = extractWalletAddress(user);
     if (addr !== walletAddress) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWalletAddress(addr);
     }
   }, [user, walletAddress]);
@@ -123,7 +236,14 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
       walletAddress &&
       transactionHash
     ) {
+      let balanceRefreshRetry: ReturnType<typeof setTimeout> | null = null;
+
       const recordSwapTransaction = async () => {
+        await refreshWalletBalances();
+        balanceRefreshRetry = setTimeout(() => {
+          refreshWalletBalances();
+        }, 3000);
+
         try {
           // Record transaction in activities
           console.log("📋 Recording swap transaction...");
@@ -167,27 +287,42 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
           console.warn("⚠️ Error collecting fee:", feeError);
         }
 
-        // Record referral if one exists
-        if (referralAddress && referralAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+        // Referral rewards only apply when a referred user buys LEXA with BNB or USDT.
+        const qualifiesForSwapReferral =
+          REFERRAL_REWARD_INPUT_TOKENS.has(lastTransactionSellToken.symbol) &&
+          lastTransactionReceiveToken.symbol === "LEXA";
+
+        if (
+          qualifiesForSwapReferral &&
+          referralAddress &&
+          referralAddress.toLowerCase() !== walletAddress.toLowerCase()
+        ) {
           try {
             console.log("🎯 Processing referral reward:", {
               referrer: referralAddress,
               referred: walletAddress,
               txHash: transactionHash,
               amount: lastTransactionSellAmount,
+              token: lastTransactionSellToken.symbol,
             });
 
             // Calculate 2% reward
-            const rewardBNB = (parseFloat(lastTransactionSellAmount) * 0.02).toString();
-
-            console.log(`💰 Sending ${rewardBNB} BNB reward to referrer`);
+            const rewardAmount = calculateReferralRewardAmount(
+              lastTransactionSellAmount,
+              lastTransactionSellToken.decimals,
+            );
+            console.log(`Sending ${rewardAmount} ${lastTransactionSellToken.symbol} reward to referrer`);
 
             // Send reward via API (immediately)
             const rewardResult = await swapRewardsSender.sendRewardViaAPI(
               referralAddress,
               walletAddress,
-              rewardBNB,
-              transactionHash
+              rewardAmount,
+              transactionHash,
+              {
+                rewardToken: lastTransactionSellToken.symbol,
+                tokenAddress: lastTransactionSellToken.address,
+              },
             );
 
             if (rewardResult.success) {
@@ -199,7 +334,8 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
                 referralAddress,
                 walletAddress,
                 lastTransactionSellAmount,
-                transactionHash
+                transactionHash,
+                lastTransactionSellToken.symbol,
               );
               
               if (recordResult.success) {
@@ -214,12 +350,20 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
             console.error("❌ Failed to process referral:", error);
             // Don't throw - the swap was successful, just the reward tracking failed
           }
+        } else if (referralAddress && !qualifiesForSwapReferral) {
+          console.log("Swap referral skipped: rewards only apply to BNB/USDT -> LEXA buys");
         }
       };
 
       recordSwapTransaction();
+
+      return () => {
+        if (balanceRefreshRetry) {
+          clearTimeout(balanceRefreshRetry);
+        }
+      };
     }
-  }, [transactionStatus, walletAddress, transactionHash, referralAddress, lastTransactionSellAmount, lastTransactionSellToken, lastTransactionReceiveToken, lastTransactionReceiveAmount]);
+  }, [transactionStatus, walletAddress, transactionHash, referralAddress, lastTransactionSellAmount, lastTransactionSellToken, lastTransactionReceiveToken, lastTransactionReceiveAmount, refreshWalletBalances]);
   // Ensure correct network after login
   useEffect(() => {
     if (!authenticated || !walletAddress) return;
@@ -255,9 +399,16 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
             });
 
             console.log("✓ [SWAP_PAGE] Successfully switched to BNB Chain");
-          } catch (switchError: any) {
+          } catch (switchError) {
+            const switchErrorCode =
+              typeof switchError === "object" &&
+              switchError !== null &&
+              "code" in switchError
+                ? (switchError as { code?: number }).code
+                : undefined;
+
             // If chain not added, add it first
-            if (switchError.code === 4902) {
+            if (switchErrorCode === 4902) {
               console.log(
                 "⚠️ [SWAP_PAGE] BNB Chain not found, attempting to add..."
               );
@@ -327,7 +478,7 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
       }
     };
 
-    const handleDisconnect = (error: any) => {
+    const handleDisconnect = (error: unknown) => {
       console.error("❌ [WALLET_EVENT] Wallet disconnected:", error);
     };
 
@@ -347,31 +498,8 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
 
   // Fetch LEXA and BNB balances in one call when authenticated
   useEffect(() => {
-    if (!authenticated || !walletAddress) return;
-
-    const fetchBalances = async () => {
-      try {
-        // Single API call for both LEXA and BNB (uses Alchemy first when configured)
-        const allBalances = await swapService.getAllBalances(walletAddress);
-        const bnbEntry = allBalances.find((b) => b.token === "BNB");
-        const lexaEntry = allBalances.find((b) => b.token === "LEXA");
-        const bnbBalance = bnbEntry?.balance ?? "0";
-        const lexaBalance = lexaEntry?.balance ?? "0";
-
-        setSellTokenBalance(
-          sellToken.symbol === "BNB" ? bnbBalance : lexaBalance
-        );
-        setReceiveTokenBalance(
-          receiveToken.symbol === "BNB" ? bnbBalance : lexaBalance
-        );
-        updateBalance(sellToken.symbol === "BNB" ? bnbBalance : lexaBalance);
-      } catch (error) {
-        console.error("Error fetching balances:", error);
-      }
-    };
-
-    fetchBalances();
-  }, [authenticated, walletAddress, sellToken, receiveToken, updateBalance]);
+    refreshWalletBalances();
+  }, [refreshWalletBalances]);
 
   // Handle transaction notifications
   useEffect(() => {
@@ -430,14 +558,6 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
       receiveToken: receiveToken.symbol,
       slippage: slippage === "custom" ? customSlippage : slippage,
     });
-
-    // Check if trying to swap LEXA to BNB (currently disabled)
-    if (sellToken.symbol === "LEXA" && receiveToken.symbol === "BNB") {
-      console.warn("⚠️ [SWAP_PAGE] LEXA to BNB swaps are currently disabled");
-      console.warn("   We're working on optimizing this route - check back soon!");
-      alert("⚠️ LEXA to BNB swaps are currently disabled.\nWe're working on optimizing this route - check back soon!");
-      return;
-    }
 
     if (!walletAddress) {
       console.error("❌ [SWAP_PAGE] Wallet address is not set!");
@@ -503,13 +623,11 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     resetTransaction();
   };
 
-  const isLexaToBNBSwap = sellToken.symbol === "LEXA" && receiveToken.symbol === "BNB";
-
   const isSwapDisabled =
     !sellAmount ||
     parseFloat(sellAmount) === 0 ||
-    transactionStatus === "loading" ||
-    isLexaToBNBSwap;
+    sellToken.symbol === receiveToken.symbol ||
+    transactionStatus === "loading";
 
   return (
     <>
@@ -600,28 +718,35 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
             </div>
 
             {/* Sell Section */}
-            <div className="mb-3">
+            <div className="relative mb-3">
               <SwapInput
                 label="Sell"
                 token={sellToken}
                 amount={sellAmount}
-                balance={balance}
-                tokenPrice={
-                  sellToken.symbol === "BNB" ? prices.bnb : prices.lexa
-                }
+                balance={sellTokenBalance ?? balance}
+                tokenPrice={getTokenPrice(sellToken.symbol, prices)}
                 onAmountChange={setSellAmount}
+                onTokenClick={() =>
+                  setOpenTokenMenu(openTokenMenu === "sell" ? null : "sell")
+                }
                 onMaxClick={handleMaxAmount}
                 onPercentageClick={handlePercentage}
                 disabled={!authenticated}
                 showBalance={true}
                 isLoading={false}
               />
+              {openTokenMenu === "sell" && (
+                <TokenMenu onSelect={handleSellTokenSelect} />
+              )}
             </div>
 
             {/* Swap Arrow Button */}
             <div className="flex justify-center -my-[25px] relative z-10">
               <motion.button
-                onClick={swapTokens}
+                onClick={() => {
+                  setOpenTokenMenu(null);
+                  swapTokens();
+                }}
                 className="w-10 h-10 rounded-xl bg-gray-800/80 border border-gray-700 flex items-center justify-center hover:bg-gray-700 transition-colors"
                 whileHover={{ scale: 1.1, rotate: 180 }}
                 whileTap={{ scale: 0.9 }}
@@ -632,20 +757,24 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
             </div>
 
             {/* Receive Section */}
-            <div className="mb-6 sm:mb-8">
+            <div className="relative mb-6 sm:mb-8">
               <SwapInput
                 label="Receive"
                 token={receiveToken}
                 amount={receiveAmount}
                 balance={receiveTokenBalance || "0"}
-                tokenPrice={
-                  receiveToken.symbol === "BNB" ? prices.bnb : prices.lexa
-                }
+                tokenPrice={getTokenPrice(receiveToken.symbol, prices)}
                 onAmountChange={setReceiveAmount}
+                onTokenClick={() =>
+                  setOpenTokenMenu(openTokenMenu === "receive" ? null : "receive")
+                }
                 disabled={!authenticated}
                 showBalance={true}
                 isLoading={isLoadingQuote}
               />
+              {openTokenMenu === "receive" && (
+                <TokenMenu onSelect={handleReceiveTokenSelect} />
+              )}
             </div>
 
             {/* Quote Information (Optional) */}
@@ -694,11 +823,7 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
                       : "bg-yellow-600 text-black cursor-not-allowed opacity-70"
                   }`}
                 >
-                  {transactionStatus === "loading"
-                    ? "Processing..."
-                    : isLexaToBNBSwap
-                    ? "Coming Soon..."
-                    : "Swap"}
+                  {transactionStatus === "loading" ? "Processing..." : "Swap"}
                 </button>
               )}
             </div>
@@ -709,18 +834,17 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
   );
 }
 
-// Server Component - can be prerendered
-export default async function SwapPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ ref?: string }>;
-}) {
-  // Await the searchParams
-  const { ref } = await searchParams;
+function SwapPageWithParams() {
+  const searchParams = useSearchParams();
+  const referrer = searchParams.get("ref") ?? undefined;
 
+  return <SwapPageClient referrer={referrer} />;
+}
+
+export default function SwapPage() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
-      <SwapPageClient referrer={ref} />
+      <SwapPageWithParams />
     </Suspense>
   );
 }

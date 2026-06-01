@@ -121,7 +121,7 @@ export default function EarnPage() {
               </h1>
 
               <p className="text-gray-300 text-base sm:text-lg md:text-xl max-w-3xl mx-auto px-2 whitespace-nowrap">
-                Earn up to 2% of purchase amounts from users who buys LEXA using LexaSwap
+                Earn up to 2% of purchase amounts from referrals who buys LEXA using LexaSwap
               </p>
             </div>
 
@@ -165,7 +165,7 @@ export default function EarnPage() {
                 <p className="text-gray-300 text-sm sm:text-base">
                   {/* {selectedReferralType === "stake" */}
                     {/* // ? "Earn 50 LEXA when your referral stakes" */}
-                    Earn 2% of purchase amount in BNB when your referral swaps
+                    Earn 2% of purchase amount when your referral buys LEXA using LexaSwap
                 </p>
               </div>
 

@@ -9,8 +9,8 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title LexaStaking
- * @dev Production-ready staking contract for LEXA tokens with multiple tiers and referral rewards
- * @notice Features: Tiered staking, daily reward distribution, referral bonuses, emergency pause
+ * @dev Staking contract for LEXA tokens with multiple tiers and maturity-based rewards
+ * @notice Features: Tiered staking, reward reservation, referral bonuses, emergency pause
  */
 contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
@@ -25,7 +25,7 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
     // ==================== STRUCTS ====================
     /// @dev Configuration for each staking tier
     struct TierConfig {
-        uint256 minStakeAmount; // Minimum stake in LEXA tokens (e.g., 10e18 for $10 worth)
+        uint256 minStakeAmount; // Minimum stake in LEXA tokens (e.g., 10e18 for 10 LEXA)
         uint256 roi90days; // ROI percentage for 90-day lock (e.g., 5 = 5%)
         uint256 roi180days; // ROI percentage for 180-day lock
     }
@@ -36,7 +36,7 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         uint256 lockDurationDays; // Lock duration (90 or 180)
         uint256 startTimestamp; // When the stake was initiated
         StakingTier tier; // Which tier was selected
-        uint256 totalRewardsEntitled; // Total rewards based on ROI (calculated at stake time)
+        uint256 totalRewardsEntitled; // Total rewards based on ROI (reserved at stake time)
         uint256 totalRewardsClaimed; // Amount of rewards already claimed
         bool active; // Whether this stake is still active
     }
@@ -60,14 +60,14 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
     
     // Admin settings
     uint256 public referralRewardAmount = 50e18; // 50 LEXA per successful referral
-    uint256 public rewardPoolBalance; // Total rewards available in the pool
+    uint256 public rewardPoolBalance; // Unreserved rewards available for new stakes/referrals
+    uint256 public reservedRewardBalance; // Rewards reserved for existing active stakes
+    uint256 public totalLockedPrincipal; // Active user principal locked in the contract
     
     // Pausable staking
     bool public stakingPaused = false;
     
     // Constants
-    uint256 private constant DAYS_90 = 90 days;
-    uint256 private constant DAYS_180 = 180 days;
     uint256 private constant SECONDS_PER_DAY = 86400;
     uint256 private constant PRECISION = 100; // For percentage calculations (5 = 5%)
 
@@ -156,21 +156,21 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         lexaToken = IERC20(_lexaToken);
 
         // Initialize tier configurations
-        // Bronze: $10 min, 5% (90d), 10% (180d)
+        // Bronze: 10 LEXA min, 5% (90d), 10% (180d)
         tiers[uint8(StakingTier.BRONZE)] = TierConfig({
             minStakeAmount: 10e18,
             roi90days: 5,
             roi180days: 10
         });
 
-        // Silver: $20 min, 10% (90d), 25% (180d)
+        // Silver: 20 LEXA min, 10% (90d), 25% (180d)
         tiers[uint8(StakingTier.SILVER)] = TierConfig({
             minStakeAmount: 20e18,
             roi90days: 10,
             roi180days: 25
         });
 
-        // Gold: $50 min, 15% (90d), 35% (180d)
+        // Gold: 50 LEXA min, 15% (90d), 35% (180d)
         tiers[uint8(StakingTier.GOLD)] = TierConfig({
             minStakeAmount: 50e18,
             roi90days: 15,
@@ -202,24 +202,41 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         require(_amount > 0, "Stake amount must be greater than zero");
         require(_referrer != msg.sender, "Cannot self-refer");
 
-        TierConfig memory tierConfig = tiers[uint8(_tier)];
-        require(_amount >= tierConfig.minStakeAmount, "Amount below minimum for tier");
-
-        // Calculate rewards based on ROI
-        uint256 roiPercentage = _durationDays == 90 
-            ? tierConfig.roi90days 
-            : tierConfig.roi180days;
-        uint256 totalRewardsEntitled = (_amount * roiPercentage) / PRECISION;
-
-        // Transfer tokens from user to contract
-        // Note: Rewards are NOT deducted from pool here anymore
-        // They will be checked against actual contract balance when user claims
+        // Transfer tokens from user to contract and account for fee-on-transfer tokens.
+        uint256 balanceBefore = lexaToken.balanceOf(address(this));
         lexaToken.safeTransferFrom(msg.sender, address(this), _amount);
+        uint256 receivedAmount = lexaToken.balanceOf(address(this)) - balanceBefore;
+        require(receivedAmount > 0, "No tokens received");
+
+        require(
+            receivedAmount >= tiers[uint8(_tier)].minStakeAmount,
+            "Amount below minimum for tier"
+        );
+
+        // Calculate and reserve rewards based on ROI. Rewards are backed up-front.
+        uint256 totalRewardsEntitled = _calculateReward(
+            receivedAmount,
+            _tier,
+            _durationDays
+        );
+
+        bool shouldRewardReferrer = _referrer != address(0) && !hasUsedReferrer[msg.sender];
+        uint256 requiredRewardFunding = totalRewardsEntitled + (
+            shouldRewardReferrer ? referralRewardAmount : 0
+        );
+        require(
+            rewardPoolBalance >= requiredRewardFunding,
+            "Insufficient reward pool"
+        );
+
+        rewardPoolBalance -= totalRewardsEntitled;
+        reservedRewardBalance += totalRewardsEntitled;
+        totalLockedPrincipal += receivedAmount;
 
         // Create stake
         uint256 stakeIndex = userStakeCount[msg.sender];
         userStakes[msg.sender][stakeIndex] = UserStake({
-            amount: _amount,
+            amount: receivedAmount,
             lockDurationDays: _durationDays,
             startTimestamp: block.timestamp,
             tier: _tier,
@@ -230,15 +247,11 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         userStakeCount[msg.sender]++;
 
         // Handle referral if provided
-        if (_referrer != address(0) && !hasUsedReferrer[msg.sender]) {
+        if (shouldRewardReferrer) {
             hasUsedReferrer[msg.sender] = true;
             stakerReferrer[msg.sender] = _referrer;
             
             // Distribute referral reward
-            require(
-                rewardPoolBalance >= referralRewardAmount,
-                "Insufficient reward pool for referral bonus"
-            );
             rewardPoolBalance -= referralRewardAmount;
             lexaToken.safeTransfer(_referrer, referralRewardAmount);
             referralRewardsClaimed[_referrer] += referralRewardAmount;
@@ -254,7 +267,7 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         emit Staked(
             msg.sender,
             _tier,
-            _amount,
+            receivedAmount,
             _durationDays,
             totalRewardsEntitled,
             _referrer,
@@ -265,10 +278,10 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
     // ==================== REWARD FUNCTIONS ====================
 
     /**
-     * @notice Calculate accumulated rewards for a specific stake
+     * @notice Calculate claimable rewards for a specific stake
      * @param _user User address
      * @param _stakeIndex Index of the stake
-     * @return Accumulated rewards amount
+     * @return Claimable rewards amount, zero until the stake matures
      */
     function getAccumulatedRewards(address _user, uint256 _stakeIndex) 
         public 
@@ -283,18 +296,12 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         uint256 lockDurationSeconds = stakeData.lockDurationDays * SECONDS_PER_DAY;
         uint256 elapsedTime = block.timestamp - stakeData.startTimestamp;
 
-        // Cap elapsed time at lock duration (rewards stop accruing after maturity)
-        if (elapsedTime > lockDurationSeconds) {
-            elapsedTime = lockDurationSeconds;
+        if (elapsedTime < lockDurationSeconds) {
+            return 0;
         }
 
-        // Linear reward distribution: calculate accumulated rewards with proper precision
-        // IMPORTANT: Multiply before dividing to avoid integer truncation
-        uint256 accumulatedRewards = (stakeData.totalRewardsEntitled * elapsedTime) / lockDurationSeconds;
-
-        // Account for already claimed rewards
-        uint256 pending = accumulatedRewards > stakeData.totalRewardsClaimed 
-            ? accumulatedRewards - stakeData.totalRewardsClaimed 
+        uint256 pending = stakeData.totalRewardsEntitled > stakeData.totalRewardsClaimed 
+            ? stakeData.totalRewardsEntitled - stakeData.totalRewardsClaimed 
             : 0;
 
         return pending;
@@ -319,7 +326,7 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
-     * @notice Claim accumulated rewards without unstaking
+     * @notice Claim rewards after maturity without unstaking
      * @param _stakeIndex Index of the stake
      */
     function claimRewards(uint256 _stakeIndex) 
@@ -330,19 +337,21 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         
         UserStake storage stakeData = userStakes[msg.sender][_stakeIndex];
         require(stakeData.active, "Stake is not active");
+        require(isStakeMatured(msg.sender, _stakeIndex), "Stake is still locked");
 
         uint256 pendingRewards = getAccumulatedRewards(msg.sender, _stakeIndex);
         require(pendingRewards > 0, "No rewards to claim");
 
-        // Check that contract has sufficient balance for rewards
-        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        // Check that reserved rewards are backed without touching user principal.
+        require(reservedRewardBalance >= pendingRewards, "Insufficient reserved rewards");
         require(
-            contractBalance >= pendingRewards,
-            "Insufficient contract balance for rewards. Admin must fund the reward pool."
+            _availableRewardTokens() >= pendingRewards,
+            "Insufficient reward backing"
         );
 
         // Update claimed rewards
         stakeData.totalRewardsClaimed += pendingRewards;
+        reservedRewardBalance -= pendingRewards;
 
         // Transfer rewards
         lexaToken.safeTransfer(msg.sender, pendingRewards);
@@ -362,13 +371,32 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         
         UserStake storage stakeData = userStakes[msg.sender][_stakeIndex];
         require(stakeData.active, "Stake is not active");
+        require(isStakeMatured(msg.sender, _stakeIndex), "Stake is still locked");
 
         uint256 pendingRewards = getAccumulatedRewards(msg.sender, _stakeIndex);
         require(pendingRewards > 0, "No rewards to restake");
+        require(reservedRewardBalance >= pendingRewards, "Insufficient reserved rewards");
+        require(
+            _availableRewardTokens() >= pendingRewards,
+            "Insufficient reward backing"
+        );
 
-        // Update stake to reflect restaked rewards
-        stakeData.amount += pendingRewards;
-        stakeData.totalRewardsClaimed += pendingRewards;
+        uint256 newPrincipal = stakeData.amount + pendingRewards;
+        uint256 roiPercentage = stakeData.lockDurationDays == 90
+            ? tiers[uint8(stakeData.tier)].roi90days
+            : tiers[uint8(stakeData.tier)].roi180days;
+        uint256 newRewardsEntitled = (newPrincipal * roiPercentage) / PRECISION;
+        require(rewardPoolBalance >= newRewardsEntitled, "Insufficient reward pool");
+
+        // Convert matured rewards into principal and begin a new lock cycle.
+        reservedRewardBalance = reservedRewardBalance - pendingRewards + newRewardsEntitled;
+        rewardPoolBalance -= newRewardsEntitled;
+        totalLockedPrincipal += pendingRewards;
+
+        stakeData.amount = newPrincipal;
+        stakeData.startTimestamp = block.timestamp;
+        stakeData.totalRewardsEntitled = newRewardsEntitled;
+        stakeData.totalRewardsClaimed = 0;
 
         emit RewardsRestaked(msg.sender, _stakeIndex, pendingRewards, block.timestamp);
     }
@@ -392,18 +420,25 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         uint256 unclaimedRewards = getAccumulatedRewards(msg.sender, _stakeIndex);
         uint256 principalAmount = stakeData.amount;
 
-        // Mark stake as inactive
-        stakeData.active = false;
-
         // Calculate total to return
         uint256 totalReturn = principalAmount + unclaimedRewards;
 
-        // Check that contract has sufficient balance
+        require(reservedRewardBalance >= unclaimedRewards, "Insufficient reserved rewards");
+        require(
+            _availableRewardTokens() >= unclaimedRewards,
+            "Insufficient reward backing"
+        );
         uint256 contractBalance = lexaToken.balanceOf(address(this));
         require(
             contractBalance >= totalReturn,
-            "Insufficient contract balance for unstaking. Admin must fund the reward pool."
+            "Insufficient contract balance for unstaking"
         );
+
+        // Mark stake as inactive and release accounting reservations.
+        stakeData.active = false;
+        stakeData.totalRewardsClaimed += unclaimedRewards;
+        totalLockedPrincipal -= principalAmount;
+        reservedRewardBalance -= unclaimedRewards;
 
         // Transfer principal + unclaimed rewards back to user
         lexaToken.safeTransfer(msg.sender, totalReturn);
@@ -428,10 +463,13 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         onlyOwner 
     {
         require(_amount > 0, "Amount must be greater than zero");
+        uint256 balanceBefore = lexaToken.balanceOf(address(this));
         lexaToken.safeTransferFrom(msg.sender, address(this), _amount);
-        rewardPoolBalance += _amount;
+        uint256 receivedAmount = lexaToken.balanceOf(address(this)) - balanceBefore;
+        require(receivedAmount > 0, "No tokens received");
+        rewardPoolBalance += receivedAmount;
 
-        emit RewardPoolFunded(msg.sender, _amount, block.timestamp);
+        emit RewardPoolFunded(msg.sender, receivedAmount, block.timestamp);
     }
 
     /**
@@ -490,8 +528,8 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
     {
         require(_amount > 0, "Amount must be greater than zero");
         require(_amount <= rewardPoolBalance, "Cannot exceed available recovery amount");
+        require(_availableUnreservedRewardTokens() >= _amount, "Insufficient reward backing");
         
-        // Deduct from tracking variable
         rewardPoolBalance -= _amount;
         lexaToken.safeTransfer(owner(), _amount);
 
@@ -508,20 +546,11 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         onlyOwner 
     {
         require(_amount > 0, "Amount must be greater than zero");
-        
-        // Get actual contract balance
-        uint256 contractBalance = lexaToken.balanceOf(address(this));
-        
-        // Calculate total locked in user stakes (principal amounts only)
-        // Available for withdrawal = contract balance - reward pool balance
-        uint256 totalLockedAmount = contractBalance - rewardPoolBalance;
-        
-        // Calculate available for withdrawal
-        uint256 availableForWithdrawal = contractBalance - totalLockedAmount;
+        uint256 availableForWithdrawal = getUnaccountedTokenBalance();
         
         require(
             _amount <= availableForWithdrawal, 
-            "Insufficient excess tokens. Cannot withdraw locked user funds."
+            "Insufficient excess tokens"
         );
         
         // Transfer to owner
@@ -608,6 +637,73 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         return tiers[uint8(_tier)];
     }
 
+    function _calculateReward(
+        uint256 _amount,
+        StakingTier _tier,
+        uint256 _durationDays
+    )
+        internal
+        view
+        returns (uint256)
+    {
+        TierConfig memory tierConfig = tiers[uint8(_tier)];
+        uint256 roiPercentage = _durationDays == 90
+            ? tierConfig.roi90days
+            : tierConfig.roi180days;
+
+        return (_amount * roiPercentage) / PRECISION;
+    }
+
+    /**
+     * @notice Get tokens in the contract that are not needed for active principal.
+     * @dev Includes reserved rewards, unreserved reward pool tokens, and accidental transfers.
+     */
+    function _availableRewardTokens()
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        if (contractBalance <= totalLockedPrincipal) {
+            return 0;
+        }
+        return contractBalance - totalLockedPrincipal;
+    }
+
+    function _availableUnreservedRewardTokens()
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        uint256 reservedBalance = totalLockedPrincipal + reservedRewardBalance;
+
+        if (contractBalance <= reservedBalance) {
+            return 0;
+        }
+
+        return contractBalance - reservedBalance;
+    }
+
+    /**
+     * @notice Get tokens sent directly to the contract outside staking/reward funding flows.
+     * @return Amount of unaccounted LEXA that owner may withdraw as excess
+     */
+    function getUnaccountedTokenBalance()
+        public
+        view
+        returns (uint256)
+    {
+        uint256 contractBalance = lexaToken.balanceOf(address(this));
+        uint256 accountedBalance = totalLockedPrincipal + reservedRewardBalance + rewardPoolBalance;
+
+        if (contractBalance <= accountedBalance) {
+            return 0;
+        }
+
+        return contractBalance - accountedBalance;
+    }
+
     /**
      * @notice Get total locked amount in contract
      * @return Total locked user funds
@@ -617,6 +713,6 @@ contract LexaStaking is ReentrancyGuard, Ownable, Pausable {
         view 
         returns (uint256) 
     {
-        return lexaToken.balanceOf(address(this)) - rewardPoolBalance;
+        return totalLockedPrincipal;
     }
 }
