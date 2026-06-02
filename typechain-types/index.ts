@@ -32,8 +32,14 @@ export type { ReentrancyGuard } from "./@openzeppelin/contracts/utils/Reentrancy
 export { ReentrancyGuard__factory } from "./factories/@openzeppelin/contracts/utils/ReentrancyGuard__factory";
 export type { MockLexaToken } from "./contracts/mocks/MockLexaToken";
 export { MockLexaToken__factory } from "./factories/contracts/mocks/MockLexaToken__factory";
+export type { MockPancakeRouter } from "./contracts/mocks/MockPancakeRouter";
+export { MockPancakeRouter__factory } from "./factories/contracts/mocks/MockPancakeRouter__factory";
 export type { LexaStaking } from "./contracts/staking/LexaStaking";
 export { LexaStaking__factory } from "./factories/contracts/staking/LexaStaking__factory";
+export type { IPancakeRouterV2 } from "./contracts/SwapExecutor.sol/IPancakeRouterV2";
+export { IPancakeRouterV2__factory } from "./factories/contracts/SwapExecutor.sol/IPancakeRouterV2__factory";
+export type { SwapExecutor } from "./contracts/SwapExecutor.sol/SwapExecutor";
+export { SwapExecutor__factory } from "./factories/contracts/SwapExecutor.sol/SwapExecutor__factory";
 export type { SwapFeeCollector } from "./contracts/SwapFeeCollector";
 export { SwapFeeCollector__factory } from "./factories/contracts/SwapFeeCollector__factory";
 export type { SwapReferralRewards } from "./contracts/SwapReferralRewards";

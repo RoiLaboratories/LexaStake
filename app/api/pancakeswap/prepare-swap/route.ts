@@ -9,6 +9,11 @@ import {
 const PANCAKESWAP_ROUTER_V2_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
+const SWAP_EXECUTOR_ADDRESS_ENV_NAMES = [
+  "SWAP_EXECUTOR_CONTRACT_ADDRESS",
+  "NEXT_PUBLIC_SWAP_EXECUTOR_ADDRESS",
+] as const;
+
 const BSC_RPC_URLS = (() => {
   const urls: string[] = [];
   
@@ -30,6 +35,19 @@ const BSC_RPC_URLS = (() => {
 
 const BSC_NETWORK = ethers.Network.from({ chainId: 56, name: "binance" });
 const BSC_RPC_URL = BSC_RPC_URLS[0];
+
+function getSwapExecutorAddress(): string {
+  for (const envName of SWAP_EXECUTOR_ADDRESS_ENV_NAMES) {
+    const address = process.env[envName]?.trim();
+    if (address) {
+      return validateAddress(address);
+    }
+  }
+
+  throw new Error(
+    `Swap executor contract not configured. Set one of: ${SWAP_EXECUTOR_ADDRESS_ENV_NAMES.join(", ")}.`,
+  );
+}
 
 /** Validate and normalize address */
 function validateAddress(addr: string): string {
@@ -81,13 +99,16 @@ function buildSwapPath(tokenIn: string, tokenOut: string): string[] {
 // Router ABI for native BNB buys and token-to-native-BNB sells.
 const ROUTER_ABI = [
   "function getAmountsOut(uint256 amountIn, address[] calldata path) view returns (uint256[] amounts)",
-  "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] amounts)",
-  "function swapExactTokensForETHSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external",
-  "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external",
 ];
 
 const ERC20_ABI = [
   "function approve(address _spender, uint256 _value) returns (bool)",
+];
+
+const SWAP_EXECUTOR_ABI = [
+  "function executeSwapExactETHForTokens(uint256 amountOutMin, address[] calldata path, address recipient, uint256 deadline) external payable returns (uint256 outputAmount, uint256 userAmount, uint256 feeAmount)",
+  "function executeSwapExactTokensForETH(address inputToken, uint256 amountIn, uint256 amountOutMin, address[] calldata path, address recipient, uint256 deadline) external returns (uint256 outputAmount, uint256 userAmount, uint256 feeAmount)",
+  "function executeSwapExactTokensForTokens(address inputToken, uint256 amountIn, uint256 amountOutMin, address[] calldata path, address recipient, uint256 deadline) external returns (uint256 outputAmount, uint256 userAmount, uint256 feeAmount)",
 ];
 
 // Pair ABI for LEXA/BNB reserve diagnostics.
@@ -499,8 +520,13 @@ export async function POST(request: NextRequest) {
     const deadline = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
     console.log(`⏰ Deadline set to: ${deadline} (${new Date(deadline * 1000).toISOString()})`);
 
-    // ✅ Use PancakeSwap Router V2 for swap execution
-    console.log(`🔄 Using Router V2 for swap execution`);
+    const minimumFeeAmountWei = (minimumAmountOutWei * BigInt(FEE_BASIS_POINTS)) / BigInt(BASIS_POINTS_DENOMINATOR);
+    const minimumUserOutputAmountWei = minimumAmountOutWei - minimumFeeAmountWei;
+    const normalizedSwapExecutorAddress = getSwapExecutorAddress();
+
+    // Use SwapExecutor so PancakeSwap output lands in the contract first, then gets split.
+    console.log(`Using SwapExecutor for swap execution`);
+    console.log(`   SwapExecutor Address: ${normalizedSwapExecutorAddress}`);
     console.log(`   Router V2 Address: ${PANCAKESWAP_ROUTER_V2_ADDRESS}`);
     
     let swapData: string;
@@ -576,8 +602,8 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Create Router V2 and ERC20 interfaces
-    const routerIface = new ethers.Interface(ROUTER_ABI);
+    // Create SwapExecutor and ERC20 interfaces
+    const executorIface = new ethers.Interface(SWAP_EXECUTOR_ABI);
     const erc20Iface = new ethers.Interface(ERC20_ABI);
     
     if (isBNBInput) {
@@ -589,7 +615,7 @@ export async function POST(request: NextRequest) {
       console.log(`     - to: ${normalizedWalletAddress}`);
       console.log(`     - deadline: ${deadline}`);
       
-      swapData = routerIface.encodeFunctionData("swapExactETHForTokens", [
+      swapData = executorIface.encodeFunctionData("executeSwapExactETHForTokens", [
         minimumAmountOutWei,
         swapPath,
         normalizedWalletAddress,
@@ -617,9 +643,10 @@ export async function POST(request: NextRequest) {
       console.log(`     - to: ${normalizedWalletAddress}`);
       console.log(`     - deadline: ${deadline}`);
 
-      swapData = routerIface.encodeFunctionData(
-        "swapExactTokensForETHSupportingFeeOnTransferTokens",
+      swapData = executorIface.encodeFunctionData(
+        "executeSwapExactTokensForETH",
         [
+          normalizedTokenIn,
           amountInWei,
           minimumAmountOutWei,
           swapPath,
@@ -647,9 +674,10 @@ export async function POST(request: NextRequest) {
       console.log(`     - to: ${normalizedWalletAddress}`);
       console.log(`     - deadline: ${deadline}`);
 
-      swapData = routerIface.encodeFunctionData(
-        "swapExactTokensForTokensSupportingFeeOnTransferTokens",
+      swapData = executorIface.encodeFunctionData(
+        "executeSwapExactTokensForTokens",
         [
+          normalizedTokenIn,
           amountInWei,
           minimumAmountOutWei,
           swapPath,
@@ -667,17 +695,17 @@ export async function POST(request: NextRequest) {
       console.log(`     - deadline: ${deadline}`);
     }
 
-    // For token input, approve Router V2 to spend the input token.
+    // For token input, approve SwapExecutor to pull the input token.
     let approvalData = null;
     let approvalTarget = null;
     
     if (!isBNBInput) {
-      approvalTarget = PANCAKESWAP_ROUTER_V2_ADDRESS;
+      approvalTarget = normalizedSwapExecutorAddress;
       approvalData = erc20Iface.encodeFunctionData("approve", [
-        PANCAKESWAP_ROUTER_V2_ADDRESS,
+        normalizedSwapExecutorAddress,
         amountInWei.toString(),
       ]);
-      console.log(`\nWill request approval for Router V2: ${PANCAKESWAP_ROUTER_V2_ADDRESS.substring(0, 14)}...`);
+      console.log(`\nWill request approval for SwapExecutor: ${normalizedSwapExecutorAddress.substring(0, 14)}...`);
       console.log(`  Token: ${normalizedTokenIn.substring(0, 14)}...`);
       console.log(`  Amount: ${ethers.formatEther(amountInWei)}`);
     }
@@ -687,14 +715,14 @@ export async function POST(request: NextRequest) {
     let targetAddress = "";
     
     if (isBNBInput) {
-      functionName = "swapExactETHForTokens (Router V2)";
-      targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
+      functionName = "executeSwapExactETHForTokens (SwapExecutor)";
+      targetAddress = normalizedSwapExecutorAddress;
     } else if (isBNBOutput) {
-      functionName = "swapExactTokensForETHSupportingFeeOnTransferTokens (Router V2)";
-      targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
+      functionName = "executeSwapExactTokensForETH (SwapExecutor)";
+      targetAddress = normalizedSwapExecutorAddress;
     } else {
-      functionName = "swapExactTokensForTokensSupportingFeeOnTransferTokens (Router V2)";
-      targetAddress = PANCAKESWAP_ROUTER_V2_ADDRESS;
+      functionName = "executeSwapExactTokensForTokens (SwapExecutor)";
+      targetAddress = normalizedSwapExecutorAddress;
     }
     
     console.log(`   Function: ${functionName}`);
@@ -702,10 +730,10 @@ export async function POST(request: NextRequest) {
     console.log(`   Swap data length: ${swapData.length} chars`);
     console.log(`   Transaction value: ${isBNBInput ? ethers.formatEther(txValue) + " BNB" : "0"}`);
 
-    // Build response - all supported swaps execute through Router V2.
+    // Build response - all supported swaps execute through SwapExecutor.
     const response = {
       swap: {
-        to: PANCAKESWAP_ROUTER_V2_ADDRESS,
+        to: normalizedSwapExecutorAddress,
         data: swapData,
         value: isBNBInput ? txValue : "0",  // Only for BNB input
       },
@@ -717,21 +745,27 @@ export async function POST(request: NextRequest) {
       details: {
         amountIn,
         amountOut: ethers.formatEther(amountOutWei),
-        minimumAmountOut: ethers.formatEther(minimumAmountOutWei),
+        routerMinimumAmountOut: ethers.formatEther(minimumAmountOutWei),
+        minimumAmountOut: ethers.formatEther(minimumUserOutputAmountWei),
         userAmountOut: ethers.formatEther(userOutputAmountWei),
         feeAmount: ethers.formatEther(feeAmountWei),
         feeAmountWei: feeAmountWei.toString(),
+        minimumFeeAmount: ethers.formatEther(minimumFeeAmountWei),
+        minimumFeeAmountWei: minimumFeeAmountWei.toString(),
+        minimumUserAmountOutWei: minimumUserOutputAmountWei.toString(),
         feePercentage: "0.3",
         path: swapPath,
         deadline,
         isBNBInput,
         slippage: slippagePercentage,
-        executionType: "router",
+        executionType: "swap-executor",
+        executorAddress: normalizedSwapExecutorAddress,
+        routerAddress: PANCAKESWAP_ROUTER_V2_ADDRESS,
       },
     };
 
     console.log(`\n📤 RESPONSE SUMMARY:`);
-    console.log(`   Execution type: Router V2`);
+    console.log(`   Execution type: SwapExecutor`);
     console.log(`   Has approval: ${!!response.approval}`);
     console.log(`   Has transfer: ${!!response.transfer}`);
     console.log(`   Input type: ${isBNBInput ? "Native BNB" : "Token"}`);

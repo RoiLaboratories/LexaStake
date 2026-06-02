@@ -18,6 +18,9 @@
     "deploy:fee-collector": "hardhat run scripts/deploySwapFeeCollector.ts",
     "deploy:fee-collector:testnet": "hardhat run scripts/deploySwapFeeCollector.ts --network bscTestnet",
     "deploy:fee-collector:mainnet": "hardhat run scripts/deploySwapFeeCollector.ts --network bsc",
+    "deploy:swap-executor": "hardhat run scripts/deploySwapExecutor.ts",
+    "deploy:swap-executor:testnet": "hardhat run scripts/deploySwapExecutor.ts --network bscTestnet",
+    "deploy:swap-executor:mainnet": "hardhat run scripts/deploySwapExecutor.ts --network bsc",
     "interact": "hardhat run scripts/interact.ts"
   },
   "dependencies": {

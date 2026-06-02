@@ -1,0 +1,12 @@
+{
+  "name": "SwapExecutor",
+  "address": "0x7F4995972CE7e45a1bBdbEA18613AeF1F097cE2C",
+  "network": "bsc",
+  "chainId": "56",
+  "deployer": "0xe71dD45E7d21409b04b609D0E6C67FFff592d43d",
+  "router": "0x10ED43C718714eb63d5aA57B78B54704E256024E",
+  "wbnb": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+  "treasury": "0x57d4721a732a90EF60CA247E269080d15F71Fa2b",
+  "deployedAt": "2026-06-02T12:59:54.621Z",
+  "blockNumber": 101885184
+}

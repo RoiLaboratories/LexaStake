@@ -3,8 +3,6 @@ import { ethers } from "ethers";
 
 const PANCAKESWAP_ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 
-const BSC_NETWORK = ethers.Network.from({ chainId: 56, name: "binance" });
-
 const BSC_RPC_URLS = (() => {
   const urls: string[] = [];
   
@@ -49,16 +47,10 @@ function validateAddress(addr: string): string {
   try {
     // Use ethers.js to validate and checksum the address
     return ethers.getAddress(trimmed);
-  } catch (e) {
+  } catch {
     // If checksum fails but format is valid, just return lowercase
     return trimmed.toLowerCase();
   }
-}
-
-/** Normalize to 0x + 40 hex chars for eth_call (skip EIP-55 checksum to avoid INVALID_ARGUMENT) */
-function toHexAddress(addr: string): string {
-  const validated = validateAddress(addr);
-  return validated.toLowerCase();
 }
 
 const RPC_FETCH_MS = 12_000;
@@ -245,7 +237,7 @@ export async function POST(request: NextRequest) {
       const amountOut = ethers.formatEther(amounts[amounts.length - 1]);
 
       // Calculate minimum amount with provided slippage (or default 0.5%)
-      const minimumAmountOut = (
+      const routerMinimumAmountOut = (
         parseFloat(amountOut) *
         (1 - slippagePercentage / 100)
       ).toString();
@@ -260,6 +252,8 @@ export async function POST(request: NextRequest) {
       const BASIS_POINTS_DENOMINATOR = 10000; // 100%
       const feeAmount = (outputValue * FEE_BASIS_POINTS / BASIS_POINTS_DENOMINATOR).toString();
       const userReceives = (outputValue - parseFloat(feeAmount)).toString();
+      const minimumFeeAmount = (parseFloat(routerMinimumAmountOut) * FEE_BASIS_POINTS / BASIS_POINTS_DENOMINATOR).toString();
+      const minimumAmountOut = (parseFloat(routerMinimumAmountOut) - parseFloat(minimumFeeAmount)).toString();
 
       // Normalize addresses for response
       const normalizedPath = path.map((addr: string) => validateAddress(addr).toLowerCase());
@@ -267,10 +261,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         amountIn,
         amountOut,
+        routerMinimumAmountOut,
         minimumAmountOut,
         priceImpact,
         path: normalizedPath,
         fee: feeAmount,
+        minimumFee: minimumFeeAmount,
         feePercentage: "0.3",
         userReceives,
       });
@@ -282,11 +278,13 @@ export async function POST(request: NextRequest) {
       console.warn("RPC failed, returning mock quote for development purposes");
       
       const mockAmountOut = (parseFloat(amountIn) * 0.9).toString(); // Assume 10% slippage for mock
-      const minimumAmountOut = (parseFloat(mockAmountOut) * (1 - slippagePercentage / 100)).toString();
+      const routerMinimumAmountOut = (parseFloat(mockAmountOut) * (1 - slippagePercentage / 100)).toString();
       
       // Calculate 0.3% fee on mock output
       const mockFeeAmount = (parseFloat(mockAmountOut) * 0.003).toString();
       const mockUserReceives = (parseFloat(mockAmountOut) - parseFloat(mockFeeAmount)).toString();
+      const minimumMockFee = (parseFloat(routerMinimumAmountOut) * 0.003).toString();
+      const minimumAmountOut = (parseFloat(routerMinimumAmountOut) - parseFloat(minimumMockFee)).toString();
 
       // Normalize addresses for response
       const normalizedPath = path.map((addr: string) => validateAddress(addr).toLowerCase());
@@ -294,10 +292,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         amountIn,
         amountOut: mockAmountOut,
+        routerMinimumAmountOut,
         minimumAmountOut,
         priceImpact: 10,
         path: normalizedPath,
         fee: mockFeeAmount,
+        minimumFee: minimumMockFee,
         feePercentage: "0.3",
         userReceives: mockUserReceives,
         warning: "Using mock quote - RPC unavailable",

@@ -34,8 +34,20 @@ interface ActivityItem {
   tx_type: "stake" | "unstake" | "claim_rewards" | "restake" | "swap";
   status?: "pending" | "confirmed" | "failed";
   amount?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   created_at?: string;
+}
+
+interface ReferralItem {
+  id?: string;
+  referredAddress: string;
+  type: "stake" | "swap";
+  amount: string;
+  rewardAmount: string;
+  rewardToken: "LEXA" | "BNB" | "USDT";
+  status: "pending" | "completed" | "failed";
+  txHash: string;
+  createdAt: string;
 }
 
 function extractWalletAddress(user: User | null): string | null {
@@ -51,11 +63,11 @@ function extractWalletAddress(user: User | null): string | null {
 }
 
 const Profile = () => {
-  const [activeTab, setActiveTab] = useState("referrals");
+  const [activeTab, setActiveTab] = useState("stakes");
   const [lexaBalance, setLexaBalance] = useState<string | null>(null);
   const [bnbBalance, setBnbBalance] = useState<string | null>(null);
   const [stakingHistory, setStakingHistory] = useState<StakingHistoryItem[]>([]);
-  const [referrals, setReferrals] = useState<any[]>([]);
+  const [referrals, setReferrals] = useState<ReferralItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -66,7 +78,6 @@ const Profile = () => {
   useEffect(() => {
     const addr = extractWalletAddress(user);
     if (!addr || !authenticated) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLexaBalance(null);
       setBnbBalance(null);
       setStakingHistory([]);
@@ -315,6 +326,18 @@ const Profile = () => {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={() => setActiveTab("stakes")}
+                className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all text-sm sm:text-base whitespace-nowrap ${
+                  activeTab === "stakes"
+                    ? "text-yellow-500 bg-transparent"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                My Stakes
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setActiveTab("referrals")}
                 className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all text-sm sm:text-base whitespace-nowrap ${
                   activeTab === "referrals"
@@ -344,6 +367,13 @@ const Profile = () => {
             <AnimatePresence mode="wait">
               {activeTab === "referrals" && (
                 <ReferralsTab isConnected={authenticated} referrals={referrals} isLoading={loading} />
+              )}
+              {activeTab === "stakes" && (
+                <StakingTab
+                  isConnected={authenticated}
+                  stakes={stakingHistory}
+                  loading={loading}
+                />
               )}
               {activeTab === "activities" && (
                 <ActivitiesTab

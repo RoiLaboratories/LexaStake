@@ -8,7 +8,6 @@ import StakeHeader from "@/components/StakeHeader";
 import { swapService } from "@/services/swap.service";
 import { supabaseService } from "@/services/supabase.service";
 import { swapRewardsSender } from "@/services/swapRewards.service";
-import { swapFeeCollectorService } from "@/services/swapFeeCollector.service";
 import { useSwap } from "@/hooks/useSwap";
 import TransactionNotification from "@/components/TransactionNotification";
 import SwapSettings from "@/components/SwapSettings";
@@ -265,26 +264,6 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
           console.log("✓ Swap transaction recorded in activities");
         } catch (txError) {
           console.warn("⚠️ Error recording transaction:", txError);
-        }
-
-        // Collect 0.3% fee from swap output
-        try {
-          console.log("💸 Collecting 0.3% swap fee...");
-          const feeResult = await swapFeeCollectorService.collectFee(
-            lastTransactionReceiveToken.address,
-            lastTransactionReceiveAmount,
-            walletAddress,
-            transactionHash
-          );
-
-          if (feeResult.success) {
-            console.log(`✅ Fee collected! Amount: ${feeResult.feeAmount}, TxHash: ${feeResult.txHash}`);
-          } else {
-            console.warn(`⚠️ Failed to collect fee: ${feeResult.error}`);
-            // Don't fail the swap, fee collection is non-critical
-          }
-        } catch (feeError) {
-          console.warn("⚠️ Error collecting fee:", feeError);
         }
 
         // Referral rewards only apply when a referred user buys LEXA with BNB or USDT.

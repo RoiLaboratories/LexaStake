@@ -647,6 +647,87 @@
       "artifacts": [
         "IERC20Metadata"
       ]
+    },
+    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\contracts\\SwapExecutor.sol": {
+      "lastModificationDate": 1780401727144,
+      "contentHash": "17dfd8850e8681d680cfdf9fd424923f",
+      "sourceName": "contracts/SwapExecutor.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IPancakeRouterV2",
+        "SwapExecutor"
+      ]
+    },
+    "C:\\Users\\Chidozie Collins\\Documents\\GitHub\\LexaStake\\contracts\\mocks\\MockPancakeRouter.sol": {
+      "lastModificationDate": 1780401765295,
+      "contentHash": "20e933c17bd84f40adbe99b21d2204af",
+      "sourceName": "contracts/mocks/MockPancakeRouter.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockPancakeRouter"
+      ]
     }
   }
 }

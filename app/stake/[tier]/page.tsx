@@ -168,9 +168,6 @@ export default function StakeDetailPage() {
 
   const tier = tierData ? tierData[params.tier as keyof typeof tierData] : null;
 
-  // Get duration days for tier calculation
-  const durationDays = duration === "90d" ? 90 : 180;
-
   useEffect(() => {
     if (!isLoadingTiers && !tier) {
       router.push("/stake");
@@ -310,25 +307,36 @@ export default function StakeDetailPage() {
         // Get current stake count to determine stake_index
         try {
           console.log("📊 Fetching stake index...");
-          const stakeCount = await stakingService.getUserStakeCount(walletAddr);
-          
-          // If stakeCount is 0, it likely means the contract call failed or it's a new user
-          // Still attempt to get details with index 0
-          const stakeIndex = Math.max(0, stakeCount - 1); // Latest stake is at count - 1
-
-          // Get stake details from contract
-          const stakeDetails = await stakingService.getStakeDetails(
-            walletAddr,
-            stakeIndex
-          );
-
-          // Determine tier name
           const tierNames: Record<number, "Bronze" | "Silver" | "Gold"> = {
             0: "Bronze",
             1: "Silver",
             2: "Gold",
           };
-          const tierName = tierNames[stakeDetails.tier] || "Bronze";
+          const fallbackTierName = tierNames[tierEnum] || "Bronze";
+          const fallbackStartTime = Math.floor(Date.now() / 1000);
+          let stakeIndex = 0;
+          let stakeStartTime = fallbackStartTime;
+          let stakeLockEndTime = fallbackStartTime + durationDays * 86400;
+          let tierName = fallbackTierName;
+
+          try {
+            const stakeCount = await stakingService.getUserStakeCount(walletAddr);
+            stakeIndex = Math.max(0, stakeCount - 1);
+
+            const stakeDetails = await stakingService.getStakeDetails(
+              walletAddr,
+              stakeIndex
+            );
+
+            tierName = tierNames[stakeDetails.tier] || fallbackTierName;
+            stakeStartTime = stakeDetails.startTimestamp;
+            stakeLockEndTime = stakeDetails.lockEndTime;
+          } catch (stakeReadError) {
+            console.warn(
+              "Could not read latest stake details after confirmation; recording with local fallback values.",
+              stakeReadError
+            );
+          }
 
           // Calculate ROI percentage based on tier and duration
           const roiMap: Record<string, Record<number, number>> = {
@@ -348,8 +356,8 @@ export default function StakeDetailPage() {
               tier: tierName,
               lock_period: durationDays,
               roi_percentage: roiPercentage,
-              start_time: stakeDetails.startTimestamp,
-              lock_end_time: stakeDetails.lockEndTime,
+              start_time: stakeStartTime,
+              lock_end_time: stakeLockEndTime,
               tx_hash: result.hash,
             },
             walletAddr
@@ -439,10 +447,12 @@ export default function StakeDetailPage() {
         setTransactionStatus("error");
         setErrorMessage("Transaction failed. Please try again.");
       }
-    } catch (error: any) {
+    } catch (error) {
       setTransactionStatus("error");
       const errorMsg =
-        error?.message || "An error occurred during staking. Please try again.";
+        error instanceof Error
+          ? error.message
+          : "An error occurred during staking. Please try again.";
       setErrorMessage(errorMsg);
       console.error("Staking error:", error);
     }

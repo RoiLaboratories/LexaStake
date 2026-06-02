@@ -116,6 +116,8 @@ class SupabaseService {
     try {
       console.log("📝 Recording staking transaction via API...");
 
+      const normalizedWalletAddress = walletAddress.toLowerCase();
+
       // Call the server-side API route that handles database operations
       const response = await fetch("/api/staking/record", {
         method: "POST",
@@ -123,7 +125,7 @@ class SupabaseService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          wallet_address: walletAddress,
+          wallet_address: normalizedWalletAddress,
           stake_index: record.stake_index,
           amount: record.amount,
           tier: record.tier,
@@ -178,10 +180,27 @@ class SupabaseService {
 
       console.log("📋 Fetching staking history for:", walletAddress);
 
+      const normalizedWalletAddress = walletAddress.toLowerCase();
+
+      const historyResponse = await fetch(
+        `/api/staking/history?wallet_address=${encodeURIComponent(normalizedWalletAddress)}`,
+      );
+      const historyResult = await historyResponse.json();
+
+      if (historyResponse.ok && historyResult.success) {
+        console.log("Staking history fetched:", historyResult.data?.length || 0, "records");
+        return historyResult.data;
+      }
+
+      console.warn(
+        "Staking history API fetch failed, falling back to Supabase client:",
+        historyResult.error || historyResponse.statusText,
+      );
+
       const { data, error } = await supabaseClient
         .from("staking_history")
         .select("*")
-        .eq("user_address", walletAddress)
+        .ilike("user_address", normalizedWalletAddress)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -208,10 +227,27 @@ class SupabaseService {
 
       console.log("📋 Fetching transactions for:", walletAddress);
 
+      const normalizedWalletAddress = walletAddress.toLowerCase();
+
+      const transactionsResponse = await fetch(
+        `/api/transactions/list?wallet_address=${encodeURIComponent(normalizedWalletAddress)}`,
+      );
+      const transactionsResult = await transactionsResponse.json();
+
+      if (transactionsResponse.ok && transactionsResult.success) {
+        console.log("Transactions fetched:", transactionsResult.data?.length || 0, "records");
+        return transactionsResult.data;
+      }
+
+      console.warn(
+        "Transactions API fetch failed, falling back to Supabase client:",
+        transactionsResult.error || transactionsResponse.statusText,
+      );
+
       const { data, error } = await supabaseClient
         .from("transactions")
         .select("*")
-        .eq("user_address", walletAddress)
+        .ilike("user_address", normalizedWalletAddress)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -285,8 +321,11 @@ class SupabaseService {
 
       console.log("🔗 Recording transaction:", record.tx_type);
 
+      const normalizedWalletAddress = walletAddress.toLowerCase();
+      const normalizedTxHash = record.tx_hash.toLowerCase();
+
       // Get or create user
-      const userId = await this.getOrCreateUser(walletAddress);
+      const userId = await this.getOrCreateUser(normalizedWalletAddress);
       if (!userId) {
         return {
           success: false,
@@ -299,8 +338,8 @@ class SupabaseService {
         .insert([
           {
             user_id: userId,
-            user_address: walletAddress,
-            tx_hash: record.tx_hash,
+            user_address: normalizedWalletAddress,
+            tx_hash: normalizedTxHash,
             tx_type: record.tx_type,
             status: record.status || "confirmed",
             amount: record.amount,
@@ -619,9 +658,12 @@ class SupabaseService {
           id: referral.id,
           referredAddress: referral.referred_address,
           type: referral.type, // 'stake' or 'swap'
-          amount: referral.type === 'stake' ? referral.stake_amount : referral.swap_input_amount,
+          amount:
+            (referral.type === 'stake'
+              ? referral.stake_amount
+              : referral.swap_input_amount) ?? "0",
           rewardAmount: referral.reward_amount,
-          rewardToken: referral.reward_token,
+          rewardToken: referral.reward_token as "LEXA" | "BNB" | "USDT",
           status: referral.status, // 'pending', 'completed', 'failed'
           txHash: referral.tx_hash,
           createdAt: referral.created_at,

@@ -9,7 +9,7 @@ interface ActivityItem {
   tx_type: "stake" | "unstake" | "claim_rewards" | "restake" | "swap";
   status?: "pending" | "confirmed" | "failed";
   amount?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   created_at?: string;
 }
 
@@ -86,7 +86,12 @@ const ActivitiesTab = ({ isConnected, activities = [], loading = false }: Activi
         border: "1px solid hsl(220, 15%, 18%)",
       }}
     >
-      {activities.length > 0 ? (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12 sm:py-16 lg:py-20 px-4 sm:px-6">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mb-4"></div>
+          <p className="text-gray-400">Loading activities...</p>
+        </div>
+      ) : activities.length > 0 ? (
         <>
           {/* Desktop Table View */}
           <div className="hidden lg:block overflow-x-auto">

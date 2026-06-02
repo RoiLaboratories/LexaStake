@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export { MockLexaToken__factory } from "./MockLexaToken__factory";
+export { MockPancakeRouter__factory } from "./MockPancakeRouter__factory";

@@ -2,3 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export type { MockLexaToken } from "./MockLexaToken";
+export type { MockPancakeRouter } from "./MockPancakeRouter";

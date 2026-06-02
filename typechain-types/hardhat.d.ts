@@ -66,9 +66,21 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.MockLexaToken__factory>;
     getContractFactory(
+      name: "MockPancakeRouter",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MockPancakeRouter__factory>;
+    getContractFactory(
       name: "LexaStaking",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.LexaStaking__factory>;
+    getContractFactory(
+      name: "IPancakeRouterV2",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IPancakeRouterV2__factory>;
+    getContractFactory(
+      name: "SwapExecutor",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.SwapExecutor__factory>;
     getContractFactory(
       name: "SwapFeeCollector",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -144,10 +156,25 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.MockLexaToken>;
     getContractAt(
+      name: "MockPancakeRouter",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MockPancakeRouter>;
+    getContractAt(
       name: "LexaStaking",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.LexaStaking>;
+    getContractAt(
+      name: "IPancakeRouterV2",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IPancakeRouterV2>;
+    getContractAt(
+      name: "SwapExecutor",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.SwapExecutor>;
     getContractAt(
       name: "SwapFeeCollector",
       address: string | ethers.Addressable,
@@ -212,9 +239,21 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MockLexaToken>;
     deployContract(
+      name: "MockPancakeRouter",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockPancakeRouter>;
+    deployContract(
       name: "LexaStaking",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.LexaStaking>;
+    deployContract(
+      name: "IPancakeRouterV2",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPancakeRouterV2>;
+    deployContract(
+      name: "SwapExecutor",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SwapExecutor>;
     deployContract(
       name: "SwapFeeCollector",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -290,10 +329,25 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.MockLexaToken>;
     deployContract(
+      name: "MockPancakeRouter",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockPancakeRouter>;
+    deployContract(
       name: "LexaStaking",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.LexaStaking>;
+    deployContract(
+      name: "IPancakeRouterV2",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IPancakeRouterV2>;
+    deployContract(
+      name: "SwapExecutor",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SwapExecutor>;
     deployContract(
       name: "SwapFeeCollector",
       args: any[],
