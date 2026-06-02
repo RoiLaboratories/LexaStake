@@ -4,12 +4,38 @@ import { Token, TransactionStatus, SwapQuote, UseSwapReturn } from "@/types/swap
 import { pancakeSwapService } from "@/services/pancakeswap.service";
 import { priceService } from "@/services/price.service";
 import { DEFAULT_SLIPPAGE, TOKENS } from "@/constants/tokens";
-import { usePrivy } from "@privy-io/react-auth";
-import { BrowserProvider, ethers } from "ethers";
+import { useEthersProvider } from "@/hooks/useEthersSigner";
+import { ethers } from "ethers";
 import { errorLogger } from "@/utils/errorLogger";
 
+function getErrorCode(error: unknown): string | number | undefined {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" || typeof code === "number") {
+      return code;
+    }
+  }
+
+  return undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+
+  return String(error);
+}
+
 export const useSwap = (): UseSwapReturn => {
-  const { user } = usePrivy();
+  const getEthersProvider = useEthersProvider();
   const [sellToken, setSellToken] = useState<Token>(TOKENS.LEXA);
   const [receiveToken, setReceiveToken] = useState<Token>(TOKENS.BNB);
   const [sellAmount, setSellAmount] = useState("");
@@ -381,20 +407,22 @@ export const useSwap = (): UseSwapReturn => {
 
         // ========== STEP 2: GET PROVIDER & SIGNER ==========
         console.log("=".repeat(50));
-        console.log("STEP 2: Getting provider and signer from Privy...");
+        console.log("STEP 2: Getting provider and signer from RainbowKit wallet...");
         console.log("=".repeat(50));
         
-        if (!window.ethereum) {
+        /*
+        if (false) {
           console.error("❌ [SWAP] window.ethereum NOT AVAILABLE!");
           throw new Error("Ethereum provider not available. Please ensure wallet is connected.");
         }
+        */
         
         console.log("✓ window.ethereum available");
         
         let provider;
         let signer;
         try {
-          provider = new BrowserProvider(window.ethereum);
+          provider = getEthersProvider();
           console.log("✓ BrowserProvider created");
           
           signer = await provider.getSigner();
@@ -539,8 +567,8 @@ export const useSwap = (): UseSwapReturn => {
               const gasWithBuffer = BigInt(Math.ceil(Number(gasEstimate) * 1.2));
               estimatedGasLimit = gasWithBuffer.toString();
               console.log(`✓ Gas with 20% buffer: ${estimatedGasLimit}`);
-            } catch (gasError: any) {
-              const gasErrorMsg = gasError instanceof Error ? gasError.message : String(gasError);
+            } catch (gasError: unknown) {
+              const gasErrorMsg = getErrorMessage(gasError);
               console.warn("⚠️ Pre-approval gas estimation failed (expected for token swaps):", gasErrorMsg.substring(0, 100));
               
               if (preparedSwap.approval) {
@@ -582,7 +610,7 @@ export const useSwap = (): UseSwapReturn => {
                 data: preparedSwap.approval.data,
                 gasLimit: "100000",
               });
-            } catch (sendError: any) {
+            } catch (sendError: unknown) {
               console.error("❌ [SWAP] Wallet rejection or signing error on approval:");
               errorLogger.logError(sendError, {
                 component: "SWAP_APPROVAL",
@@ -592,14 +620,17 @@ export const useSwap = (): UseSwapReturn => {
                 timestamp: new Date().toISOString(),
               });
               
-              if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
+              const sendErrorCode = getErrorCode(sendError);
+              const sendErrorMessage = getErrorMessage(sendError);
+
+              if (sendErrorCode === "ACTION_REJECTED" || sendErrorCode === 4001) {
                 setErrorMessage("You rejected the approval request");
-              } else if (sendError?.message?.toLowerCase().includes("user denied")) {
+              } else if (sendErrorMessage.toLowerCase().includes("user denied")) {
                 setErrorMessage("You rejected the approval request");
-              } else if (sendError?.message?.toLowerCase().includes("insufficient")) {
+              } else if (sendErrorMessage.toLowerCase().includes("insufficient")) {
                 setErrorMessage("Insufficient balance for approval");
               } else {
-                setErrorMessage(`Approval failed: ${sendError?.message || String(sendError)}`);
+                setErrorMessage(`Approval failed: ${sendErrorMessage}`);
               }
               
               setTransactionStatus("error");
@@ -732,8 +763,8 @@ export const useSwap = (): UseSwapReturn => {
               console.log(`✓ Gas estimation successful!`);
               console.log(`   Raw estimate: ${gasEstimate.toString()}`);
               console.log(`   With 20% buffer: ${estimatedGasLimit}`);
-            } catch (gasError: any) {
-              const errorMsg = String(gasError.message || gasError);
+            } catch (gasError: unknown) {
+              const errorMsg = getErrorMessage(gasError);
               const isKError = errorMsg.toLowerCase().includes("pancake: k") || 
                               errorMsg.toLowerCase().includes("k (action");
               
@@ -784,10 +815,13 @@ export const useSwap = (): UseSwapReturn => {
                 data: preparedSwap.transfer.data,
                 gasLimit: "150000", // Increased from 100k for more safety
               });
-            } catch (sendError: any) {
+            } catch (sendError: unknown) {
               console.error("❌ [SWAP] Transfer wallet rejection or error:");
-              console.error("   Error code:", sendError?.code);
-              console.error("   Error message:", sendError?.message);
+              const sendErrorCode = getErrorCode(sendError);
+              const sendErrorMessage = getErrorMessage(sendError);
+
+              console.error("   Error code:", sendErrorCode);
+              console.error("   Error message:", sendErrorMessage);
               errorLogger.logError(sendError, {
                 component: "SWAP_TRANSFER",
                 action: "sendTransaction",
@@ -796,12 +830,12 @@ export const useSwap = (): UseSwapReturn => {
                 timestamp: new Date().toISOString(),
               });
               
-              if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
+              if (sendErrorCode === "ACTION_REJECTED" || sendErrorCode === 4001) {
                 setErrorMessage("You rejected the transfer request");
-              } else if (sendError?.message?.includes("insufficient")) {
+              } else if (sendErrorMessage.includes("insufficient")) {
                 setErrorMessage("Insufficient LEXA balance for transfer");
               } else {
-                setErrorMessage(`Transfer failed: ${sendError?.message || String(sendError)}`);
+                setErrorMessage(`Transfer failed: ${sendErrorMessage}`);
               }
               
               setTransactionStatus("error");
@@ -865,8 +899,8 @@ export const useSwap = (): UseSwapReturn => {
                 console.log(`✓ Gas estimation successful!`);
                 console.log(`   Raw estimate: ${gasEstimate.toString()}`);
                 console.log(`   With 20% buffer: ${estimatedGasLimit}`);
-              } catch (gasError: any) {
-                const errorMsg = String(gasError.message || gasError);
+              } catch (gasError: unknown) {
+                const errorMsg = getErrorMessage(gasError);
                 console.error("⚠️  Gas estimation after transfer failed:", errorMsg.substring(0, 150));
                 console.log("   Using conservative fallback 500000 gas");
                 estimatedGasLimit = "500000";
@@ -951,10 +985,13 @@ export const useSwap = (): UseSwapReturn => {
                 gasLimit: estimatedGasLimit,
               });
               console.log("✅ Wallet accepted transaction");
-            } catch (sendError: any) {
+            } catch (sendError: unknown) {
               console.error("❌ [SWAP] WALLET REJECTED - Wallet rejection or signing error on swap:");
-              console.error("❌ Error code:", sendError?.code);
-              console.error("❌ Error message:", sendError?.message);
+              const sendErrorCode = getErrorCode(sendError);
+              const sendErrorMessage = getErrorMessage(sendError);
+
+              console.error("❌ Error code:", sendErrorCode);
+              console.error("❌ Error message:", sendErrorMessage);
               console.error("❌ Full error:", sendError);
               errorLogger.logError(sendError, {
                 component: "SWAP_EXECUTION",
@@ -970,10 +1007,10 @@ export const useSwap = (): UseSwapReturn => {
               });
               
               // Check for specific error types
-              const errorMsg = sendError?.message?.toLowerCase() || "";
+              const errorMsg = sendErrorMessage.toLowerCase();
               const isLexaPair = sellToken.symbol === "LEXA" || receiveToken.symbol === "LEXA";
               
-              if (sendError?.code === "ACTION_REJECTED" || sendError?.code === 4001) {
+              if (sendErrorCode === "ACTION_REJECTED" || sendErrorCode === 4001) {
                 setErrorMessage("❌ You rejected the swap transaction. Check console for details.");
               } else if (errorMsg.includes("pancake: k")) {
                 console.error("\n🚨 PANCAKE: K ERROR - Pool x*y=k invariant cannot be satisfied");
@@ -1005,7 +1042,7 @@ export const useSwap = (): UseSwapReturn => {
               } else if (errorMsg.includes("reverted") || errorMsg.includes("execution reverted")) {
                 setErrorMessage("❌ Transaction reverted - likely slippage, liquidity, or approval issue. Try increasing slippage.");
               } else {
-                setErrorMessage(`❌ Swap failed: ${sendError?.message || String(sendError)}. Check console for full error.`);
+                setErrorMessage(`❌ Swap failed: ${sendErrorMessage}. Check console for full error.`);
               }
               
               setTransactionStatus("error");
@@ -1114,7 +1151,7 @@ export const useSwap = (): UseSwapReturn => {
       
       console.log("🚀 [SWAP] ========== SWAP EXECUTION COMPLETE ==========\n");
     },
-    [sellToken, receiveToken, sellAmount, slippage, customSlippage],
+    [sellToken, receiveToken, sellAmount, slippage, customSlippage, getEthersProvider],
   );
 
   const resetTransaction = useCallback(() => {

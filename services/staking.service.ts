@@ -38,6 +38,15 @@ const ERC20_ABI = [
   },
 ];
 
+const getErrorStringProp = (error: unknown, key: string): string | undefined => {
+  if (typeof error !== "object" || error === null) return undefined;
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+};
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 // Staking tier enum
 export enum StakingTier {
   BRONZE = 0,
@@ -84,16 +93,12 @@ class StakingService {
   }
 
   /**
-   * Get ethers signer from Privy wallet
-   * To be called from a component using the usePrivy hook
+   * Get an ethers signer from the connected wallet.
+   * To be called from a wallet-aware component.
    * 
    * @example
-   * const { user } = usePrivy();
-   * if (user?.wallet?.chainId === 56) {
-   *   const provider = await user.wallet.getEthersProvider();
-   *   const signer = await provider.getSigner();
-   *   // Pass signer to stakingService methods
-   * }
+   * const signer = await getSigner();
+   * // Pass signer to stakingService methods
    */
 
   /**
@@ -120,10 +125,10 @@ class StakingService {
 
         console.log("✓ Allowance:", ethers.formatEther(allowance), "LEXA");
         return allowance;
-      } catch (allowanceError: any) {
+      } catch (allowanceError: unknown) {
         console.error("❌ Failed to check allowance:", allowanceError);
         
-        if (allowanceError.code === 'CALL_EXCEPTION') {
+        if (getErrorStringProp(allowanceError, "code") === 'CALL_EXCEPTION') {
           throw new Error(
             `Failed to call allowance on LEXA token at ${this.LEXA_TOKEN_ADDRESS}. The contract may not be a valid ERC20 token or the address may be incorrect.`
           );
@@ -140,7 +145,7 @@ class StakingService {
   /**
    * Approve LEXA token for staking
    * @param amount Amount to approve in wei
-   * @param signer Ethers signer from Privy wallet
+   * @param signer Ethers signer from the connected wallet
    */
   async approveToken(
     amount: bigint,
@@ -171,8 +176,8 @@ class StakingService {
             `You are on the wrong network (${network?.name}). Please switch to BNB Chain (chainId 56) in your wallet.`
           );
         }
-      } catch (networkError: any) {
-        if (networkError.message.includes('wrong network')) {
+      } catch (networkError: unknown) {
+        if (getErrorMessage(networkError).includes('wrong network')) {
           throw networkError;
         }
         console.warn("⚠️ Could not verify network:", networkError);
@@ -195,13 +200,13 @@ class StakingService {
           hash: tx.hash,
           status: receipt?.status === 1,
         };
-      } catch (approveError: any) {
+      } catch (approveError: unknown) {
         console.error("❌ Approve call failed:", approveError);
         
         // Provide helpful error message
-        if (approveError.code === 'CALL_EXCEPTION') {
+        if (getErrorStringProp(approveError, "code") === 'CALL_EXCEPTION') {
           // Mobile wallet network switching issue
-          const errorMsg = approveError.message || '';
+          const errorMsg = getErrorMessage(approveError);
           if (errorMsg.includes('revert') || errorMsg.includes('estimateGas')) {
             throw new Error(
               'Network Error: Your wallet may not be properly connected to BNB Chain. ' +
@@ -210,7 +215,7 @@ class StakingService {
           }
           
           throw new Error(
-            `Failed to call approve on LEXA token. This may indicate the token address (${this.LEXA_TOKEN_ADDRESS}) is incorrect or the contract is not a valid ERC20 token. Error details: ${approveError.message}`
+            `Failed to call approve on LEXA token. This may indicate the token address (${this.LEXA_TOKEN_ADDRESS}) is incorrect or the contract is not a valid ERC20 token. Error details: ${errorMsg}`
           );
         }
         
@@ -225,7 +230,7 @@ class StakingService {
   /**
    * Stake LEXA tokens
    * @param params Staking parameters (amount, tier, duration)
-   * @param signer Ethers signer from Privy wallet
+   * @param signer Ethers signer from the connected wallet
    */
   async stake(
     params: StakeParams,
@@ -383,7 +388,7 @@ class StakingService {
   /**
    * Claim rewards from a stake
    * @param stakeIndex Index of the stake
-   * @param signer Ethers signer from Privy wallet
+   * @param signer Ethers signer from the connected wallet
    * @param userAddress User wallet address (for validation)
    */
   async claimRewards(
@@ -450,7 +455,7 @@ class StakingService {
   /**
    * Restake rewards back into the same stake position
    * @param stakeIndex Index of the stake
-   * @param signer Ethers signer from Privy wallet
+   * @param signer Ethers signer from the connected wallet
    * @param userAddress User wallet address (for validation)
    */
   async restakeRewards(
@@ -541,7 +546,7 @@ class StakingService {
   /**
    * Unstake tokens
    * @param stakeIndex Index of the stake
-   * @param signer Ethers signer from Privy wallet
+   * @param signer Ethers signer from the connected wallet
    */
   async unstake(
     stakeIndex: number,
@@ -603,10 +608,12 @@ class StakingService {
       let stakeCount;
       try {
         stakeCount = await stakingContract.userStakeCount(userAddress);
-      } catch (contractError: any) {
+      } catch (contractError: unknown) {
         // If contract call fails, return 0 instead of crashing
         // This handles new users or access control issues
-        const errorMsg = contractError?.reason || contractError?.message || String(contractError);
+        const errorMsg =
+          getErrorStringProp(contractError, "reason") ||
+          getErrorMessage(contractError);
         console.warn(
           `⚠️ Contract call failed for userStakeCount (might be a new user or access control): ${errorMsg}`
         );

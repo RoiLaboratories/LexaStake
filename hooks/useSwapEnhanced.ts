@@ -1,11 +1,11 @@
 /**
  * Enhanced useSwap Hook
- * Manages swap state and operations with proper error handling for Privy + PancakeSwap
+ * Manages swap state and operations with proper error handling for RainbowKit + PancakeSwap
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { BrowserProvider, ethers } from "ethers";
+import { useAccount } from "wagmi";
+import { useEthersProvider } from "@/hooks/useEthersSigner";
 import { Token, TransactionStatus, SwapQuote } from "@/types/swap.types";
 import { TOKENS, DEFAULT_SLIPPAGE, SLIPPAGE_OPTIONS } from "@/constants/tokens";
 import { priceService } from "@/services/price.service";
@@ -26,12 +26,13 @@ const WBNB_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 export const useSwap = () => {
   // ========================================================================
-  // Privy & Wallet
+  // RainbowKit/Wagmi wallet
   // ========================================================================
 
-  const { user, authenticated } = usePrivy();
-  const { wallets } = useWallets();
-  const walletAddress = user?.wallet?.address;
+  const { address, isConnected } = useAccount();
+  const getEthersProvider = useEthersProvider();
+  const walletAddress = address ?? null;
+  const authenticated = isConnected && Boolean(walletAddress);
 
   // ========================================================================
   // Swap State
@@ -100,8 +101,7 @@ export const useSwap = () => {
       setErrorMessage(null);
 
       try {
-        // Get provider from Privy
-        const provider = new BrowserProvider(window.ethereum!);
+        const provider = getEthersProvider();
 
         // Verify we're on BSC
         await verifyBSCNetwork(provider);
@@ -160,6 +160,7 @@ export const useSwap = () => {
     customSlippage,
     authenticated,
     walletAddress,
+    getEthersProvider,
   ]);
 
   // ========================================================================
@@ -207,7 +208,7 @@ export const useSwap = () => {
       }
 
       try {
-        const provider = new BrowserProvider(window.ethereum!);
+        const provider = getEthersProvider();
         const balanceStr = await getTokenBalance(
           provider,
           sellToken.address,
@@ -226,7 +227,7 @@ export const useSwap = () => {
     return () => {
       if (balanceTimeoutRef.current) clearTimeout(balanceTimeoutRef.current);
     };
-  }, [authenticated, walletAddress, sellToken]);
+  }, [authenticated, walletAddress, sellToken, getEthersProvider]);
 
   // ========================================================================
   // Token Swap
@@ -312,11 +313,7 @@ export const useSwap = () => {
 
       setLoadingMessage("Connecting to wallet...");
 
-      if (!window.ethereum) {
-        throw new SwapError("Ethereum provider not available", "NO_PROVIDER");
-      }
-
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = getEthersProvider();
       const signer = await provider.getSigner();
 
       // ====================================================================
@@ -442,6 +439,7 @@ export const useSwap = () => {
     receiveToken,
     slippage,
     customSlippage,
+    getEthersProvider,
   ]);
 
   // ========================================================================
@@ -462,7 +460,7 @@ export const useSwap = () => {
     if (!walletAddress) return;
 
     try {
-      const provider = new BrowserProvider(window.ethereum!);
+      const provider = getEthersProvider();
       const newBalance = await getTokenBalance(
         provider,
         sellToken.address,
@@ -472,7 +470,7 @@ export const useSwap = () => {
     } catch (error) {
       console.warn("Failed to update balance:", error);
     }
-  }, [walletAddress, sellToken]);
+  }, [walletAddress, sellToken, getEthersProvider]);
 
   // ========================================================================
   // Return Hook API

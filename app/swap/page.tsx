@@ -15,7 +15,9 @@ import SwapInput from "@/components/swapInput";
 import TokenIcon from "@/components/TokenIcon";
 import { SWAP_TOKENS, TOKENS } from "@/constants/tokens";
 import { Token } from "@/types/swap.types";
-import { usePrivy, User } from "@privy-io/react-auth";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { useAccount, useChainId, useSwitchChain } from "wagmi";
+import { bsc } from "wagmi/chains";
 
 const REFERRAL_REWARD_INPUT_TOKENS = new Set(["BNB", "USDT"]);
 
@@ -55,18 +57,6 @@ function TokenMenu({ onSelect }: TokenMenuProps) {
   );
 }
 
-function extractWalletAddress(user: User | null): string | null {
-  if (!user) return null;
-  if (user.wallet?.address) return user.wallet.address;
-  const walletAccount = user.linkedAccounts?.find(
-    (acc) => "type" in acc && acc.type === "wallet",
-  );
-  if (walletAccount && "address" in walletAccount) {
-    return (walletAccount as { address: string }).address;
-  }
-  return null;
-}
-
 interface SwapPageClientProps {
   referrer?: string;
 }
@@ -76,7 +66,6 @@ type SwapDebugWindow = Window & typeof globalThis & {
 };
 
 export function SwapPageClient({ referrer }: SwapPageClientProps) {
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const referralAddress = referrer || null;
   const [showSettings, setShowSettings] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
@@ -84,7 +73,12 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
   const [receiveTokenBalance, setReceiveTokenBalance] = useState<string | null>(null);
   const [openTokenMenu, setOpenTokenMenu] = useState<"sell" | "receive" | null>(null);
 
-  const { authenticated, user, login } = usePrivy();
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
+  const walletAddress = address ?? null;
+  const authenticated = isConnected && Boolean(walletAddress);
 
   useEffect(() => {
     console.log("📄 [SWAP_PAGE] Component mounted - console is working!");
@@ -211,22 +205,10 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     [clearTokenAmounts, sellToken, setReceiveToken, setSellToken],
   );
 
-  // Connect wallet handler using Privy
-  const handleConnect = async () => {
-    try {
-      await login();
-    } catch (error) {
-      console.error("Privy login failed:", error);
-    }
+  // Connect wallet handler using RainbowKit
+  const handleConnect = () => {
+    openConnectModal?.();
   };
-
-  // Derive wallet address from Privy user
-  useEffect(() => {
-    const addr = extractWalletAddress(user);
-    if (addr !== walletAddress) {
-      setWalletAddress(addr);
-    }
-  }, [user, walletAddress]);
 
   // Handle transaction recording and referral after successful swap
   useEffect(() => {
@@ -551,6 +533,17 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
     console.log("✓ [SWAP_PAGE] Validation passed, calling executeSwap...");
     
     try {
+      if (!authenticated || !walletAddress) {
+        openConnectModal?.();
+        throw new Error("Wallet not connected");
+      }
+
+      if (chainId !== bsc.id) {
+        console.log("Switching wallet to BNB Chain before swap...");
+        await switchChainAsync({ chainId: bsc.id });
+      }
+
+      if (false) {
       // Check wallet connection status
       if (!window.ethereum) {
         console.error("❌ [SWAP_PAGE] window.ethereum is not available!");
@@ -558,7 +551,7 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
       }
 
       // Verify we can get accounts
-      const accounts = await window.ethereum.request?.({ method: "eth_accounts" }) as string[] | undefined;
+      const accounts = ((await window.ethereum.request?.({ method: "eth_accounts" })) as string[] | undefined) ?? [];
       console.log("🔐 [SWAP_PAGE] Connected accounts:", accounts);
       
       if (!accounts || accounts.length === 0) {
@@ -566,7 +559,7 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
         throw new Error("No wallet accounts available");
       }
 
-      if (accounts[0].toLowerCase() !== walletAddress.toLowerCase()) {
+      if (accounts[0]?.toLowerCase() !== walletAddress!.toLowerCase()) {
         console.warn("⚠️ [SWAP_PAGE] Account mismatch! Active:", accounts[0], "Expected:", walletAddress);
       }
 
@@ -577,6 +570,8 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
       if (chainId !== "0x38") {
         console.error(`❌ [SWAP_PAGE] WRONG CHAIN! Current: ${chainId}, Expected: 0x38`);
         throw new Error(`Wrong network. Current: ${chainId}, Expected: 0x38. Please switch to BNB Chain.`);
+      }
+
       }
 
       console.log("✓ [SWAP_PAGE] Pre-flight checks passed, executing swap...");

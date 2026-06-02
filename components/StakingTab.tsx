@@ -2,10 +2,9 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { useState, useRef, useCallback } from "react";
-import { usePrivy } from "@privy-io/react-auth";
-import { BrowserProvider } from "ethers";
 import { stakingService } from "@/services/staking.service";
 import { useWalletConnection } from "@/hooks/useWalletConnection";
+import { useEthersSigner } from "@/hooks/useEthersSigner";
 import TransactionNotification from "@/components/TransactionNotification";
 
 interface StakingHistoryItem {
@@ -93,8 +92,8 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
     return start + lockPeriod * 86400;
   };
 
-  const { user } = usePrivy();
   const { switchToBNBChain } = useWalletConnection();
+  const getSigner = useEthersSigner();
   const [transactionLoading, setTransactionLoading] = useState<number | null>(null); // Track which stake is processing
   const [transactionAction, setTransactionAction] = useState<'claim' | 'restake' | 'unstake' | null>(null); // Track which action is processing
   const [transactionStatus, setTransactionStatus] = useState<{ [key: number]: 'idle' | 'loading' | 'success' | 'error' }>({});
@@ -119,15 +118,6 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
     if (currentStake && transactionAction) {
       handleStakeAction(currentStake, transactionAction);
     }
-  };
-
-  // Get signer from Privy wallet
-  const getSigner = async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      throw new Error("Wallet provider not available");
-    }
-    const provider = new BrowserProvider(window.ethereum);
-    return provider.getSigner();
   };
 
   // Unified handler for all stake actions (claim, restake, unstake)
@@ -217,7 +207,7 @@ const StakingTab = ({ isConnected, stakes = [], loading = false }: StakingTabPro
         processingStakesRef.current.delete(stake.stake_index);
       }, 5000);
     }
-  }, [stakes, switchToBNBChain]);
+  }, [getSigner, switchToBNBChain]);
 
   // Create wrapper handlers for button clicks
   const handleClaimClick = useCallback((stake: StakingHistoryItem, e?: React.MouseEvent) => {

@@ -1,7 +1,6 @@
 "use client";
 // components/swap/TransactionNotification.tsx
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
 import { TransactionStatus } from "@/types/swap.types";
 
 interface TransactionNotificationProps {
@@ -44,12 +43,12 @@ export default function TransactionNotification({
             onClick={onClose}
           />
           
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm px-4">
+          <div className="fixed top-4 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 sm:top-6">
             <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className={`relative rounded-xl p-5 ${
+            className={`relative max-h-[calc(100vh-2rem)] overflow-hidden rounded-xl p-5 shadow-2xl sm:max-h-[calc(100vh-3rem)] ${
               status === "loading"
                 ? "bg-gray-900 border-2 border-gray-700"
                 : status === "success"
@@ -89,8 +88,8 @@ export default function TransactionNotification({
 
             {/* Error State */}
             {status === "error" && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
+              <div className="min-w-0">
+                <div className="mb-3 flex min-w-0 items-center gap-2 pr-8">
                   <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shrink-0">
                     <svg
                       className="w-5 h-5 text-white"
@@ -104,13 +103,15 @@ export default function TransactionNotification({
                       <path d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-white">
+                  <h3 className="min-w-0 text-lg font-bold text-white break-words [overflow-wrap:anywhere]">
                     {isRetryable ? "Transaction Cancelled" : "Transaction failed!"}
                   </h3>
                 </div>
-                <p className="text-gray-300 text-sm mb-4 leading-relaxed whitespace-pre-wrap">
+                <div className="mb-4 max-h-[50vh] overflow-y-auto overscroll-contain pr-1 text-sm leading-relaxed text-gray-300 sm:max-h-[55vh]">
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {errorMessage || "An unknown error occurred"}
-                </p>
+                  </p>
+                </div>
                 {isRetryable && onRetry && (
                   <button
                     onClick={onRetry}

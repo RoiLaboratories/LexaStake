@@ -2,12 +2,12 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { usePrivy, User } from "@privy-io/react-auth";
 import { Upload } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
 import StakingTab from "@/components/StakingTab";
 import ReferralsTab from "@/components/ReferralsTab";
 import ActivitiesTab from "@/components/ActivitiesTab";
+import { useConnectedWallet } from "@/hooks/useConnectedWallet";
 import { swapService } from "@/services/swap.service";
 import { supabaseService } from "@/services/supabase.service";
 import { TOKENS } from "@/constants/tokens";
@@ -50,18 +50,6 @@ interface ReferralItem {
   createdAt: string;
 }
 
-function extractWalletAddress(user: User | null): string | null {
-  if (!user) return null;
-  if (user.wallet?.address) return user.wallet.address;
-  const walletAccount = user.linkedAccounts?.find(
-    (acc) => "type" in acc && acc.type === "wallet",
-  );
-  if (walletAccount && "address" in walletAccount) {
-    return (walletAccount as { address: string }).address;
-  }
-  return null;
-}
-
 const Profile = () => {
   const [activeTab, setActiveTab] = useState("stakes");
   const [lexaBalance, setLexaBalance] = useState<string | null>(null);
@@ -73,10 +61,10 @@ const Profile = () => {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { authenticated, user } = usePrivy();
+  const { authenticated, walletAddress } = useConnectedWallet();
 
   useEffect(() => {
-    const addr = extractWalletAddress(user);
+    const addr = walletAddress;
     if (!addr || !authenticated) {
       setLexaBalance(null);
       setBnbBalance(null);
@@ -128,7 +116,7 @@ const Profile = () => {
     };
 
     fetchData();
-  }, [user, authenticated]);
+  }, [walletAddress, authenticated]);
 
   const handleImageUploadClick = () => {
     fileInputRef.current?.click();
@@ -150,7 +138,7 @@ const Profile = () => {
       return;
     }
 
-    const addr = extractWalletAddress(user);
+    const addr = walletAddress;
     if (!addr) {
       alert("Wallet address not found");
       return;

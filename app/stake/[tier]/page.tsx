@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
-import { usePrivy, User } from "@privy-io/react-auth";
+import { useConnectedWallet } from "@/hooks/useConnectedWallet";
+import { useEthersSigner } from "@/hooks/useEthersSigner";
 import { blockchainService } from "@/services/blockchain.service";
 import { stakingService, StakingTier } from "@/services/staking.service";
 import { priceService } from "@/services/price.service";
@@ -14,24 +15,13 @@ import { useWalletConnection } from "@/hooks/useWalletConnection";
 // Prevent prerendering since this page uses useSearchParams (referral link)
 export const dynamic = "force-dynamic";
 
-function extractWalletAddress(user: User | null): string | null {
-  if (!user) return null;
-  if (user.wallet?.address) return user.wallet.address;
-  const walletAccount = user.linkedAccounts?.find(
-    (acc) => "type" in acc && acc.type === "wallet",
-  );
-  if (walletAccount && "address" in walletAccount) {
-    return (walletAccount as { address: string }).address;
-  }
-  return null;
-}
-
 export default function StakeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { authenticated, user } = usePrivy();
+  const { authenticated, walletAddress } = useConnectedWallet();
   const { switchToBNBChain } = useWalletConnection();
+  const getSigner = useEthersSigner();
 
   // Get referral address from URL parameter
   const referralAddress = searchParams.get("ref");
@@ -79,7 +69,7 @@ export default function StakeDetailPage() {
 
   // Fetch user's LEXA balance
   useEffect(() => {
-    const addr = extractWalletAddress(user);
+    const addr = walletAddress;
     if (!addr || !authenticated) {
       setBalance(null);
       return;
@@ -100,7 +90,7 @@ export default function StakeDetailPage() {
     };
 
     fetchBalance();
-  }, [user, authenticated]);
+  }, [walletAddress, authenticated]);
 
   // Fetch tier configurations from smart contract
   useEffect(() => {
@@ -225,7 +215,7 @@ export default function StakeDetailPage() {
       return;
     }
 
-    if (!user?.wallet) {
+    if (!walletAddress) {
       setErrorMessage("Wallet not connected");
       return;
     }
@@ -240,22 +230,22 @@ export default function StakeDetailPage() {
       await switchToBNBChain();
       console.log("✓ Wallet switched to BNB Chain");
 
-      // Get signer from window.ethereum (injected by Privy)
-      if (!window.ethereum) {
-        throw new Error("Ethereum provider not available. Please ensure Privy wallet is properly connected.");
+      // Get signer from the RainbowKit/wagmi wallet client.
+      if (!walletAddress) {
+        throw new Error("Wallet not connected.");
       }
 
       console.log("🔗 Initializing BrowserProvider with window.ethereum...");
 
-      const { BrowserProvider, ethers } = await import("ethers");
+      const { ethers } = await import("ethers");
       let signer;
       
       try {
-        const provider = new BrowserProvider(window.ethereum);
+        const signerFromWallet = await getSigner();
         console.log("✓ BrowserProvider created");
         
         // Try to get the signer - this may trigger RPC calls
-        signer = await provider.getSigner();
+        signer = signerFromWallet;
         console.log("✓ Signer obtained");
       } catch (providerError) {
         console.error("❌ Provider/Signer error:", providerError);
@@ -289,7 +279,7 @@ export default function StakeDetailPage() {
           durationDays,
           referrer: referralAddress || undefined, // Use referral address from URL if available
         },
-        signer  // Pass ethers signer from BrowserProvider
+        signer  // Pass ethers signer from RainbowKit wallet client
       );
 
       if (result.status) {
@@ -435,7 +425,7 @@ export default function StakeDetailPage() {
 
         // Refetch balance after successful stake
         setTimeout(() => {
-          const addr = extractWalletAddress(user);
+          const addr = walletAddress;
           if (addr && authenticated) {
             blockchainService
               .getLexaAndBNBBalances(addr)

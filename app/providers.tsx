@@ -1,53 +1,46 @@
 "use client";
-import { PrivyProvider } from "@privy-io/react-auth";
-import React from "react";
+import "@rainbow-me/rainbowkit/styles.css";
 
-// BNB Smart Chain configuration
-const BNB_CHAIN_CONFIG = {
-  chainId: 56,
-  chainName: "BNB Smart Chain",
-  nativeCurrency: {
-    name: "BNB",
-    symbol: "BNB",
-    decimals: 18,
-  },
-  rpcUrls: ["https://bsc.meowrpc.com"],
-  blockExplorerUrls: ["https://bscscan.com"],
-};
+import {
+  RainbowKitProvider,
+  darkTheme,
+  getDefaultConfig,
+} from "@rainbow-me/rainbowkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React, { useState } from "react";
+import { WagmiProvider } from "wagmi";
+import { bsc } from "wagmi/chains";
+
+const walletConnectProjectId =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
+
+const wagmiConfig = getDefaultConfig({
+  appName: "LEXASWAP",
+  projectId: walletConnectProjectId,
+  chains: [bsc],
+  ssr: true,
+});
 
 export default function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
+
   return (
-    <PrivyProvider
-      appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ""}
-      config={{
-        appearance: {
-          theme: "dark",
-          accentColor: "#7bb8ff",
-        },
-        // Force Privy to use BNB Chain as the default network
-        defaultChain: {
-          id: BNB_CHAIN_CONFIG.chainId,
-          name: BNB_CHAIN_CONFIG.chainName,
-          nativeCurrency: BNB_CHAIN_CONFIG.nativeCurrency,
-          rpcUrls: {
-            default: { http: BNB_CHAIN_CONFIG.rpcUrls },
-            public: { http: BNB_CHAIN_CONFIG.rpcUrls },
-          },
-        } as any,
-        supportedChains: [
-          {
-            id: BNB_CHAIN_CONFIG.chainId,
-            name: BNB_CHAIN_CONFIG.chainName,
-            nativeCurrency: BNB_CHAIN_CONFIG.nativeCurrency,
-            rpcUrls: {
-              default: { http: BNB_CHAIN_CONFIG.rpcUrls },
-              public: { http: BNB_CHAIN_CONFIG.rpcUrls },
-            },
-          } as any,
-        ],
-      }}
-    >
-      {children}
-    </PrivyProvider>
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          initialChain={bsc}
+          modalSize="compact"
+          theme={darkTheme({
+            accentColor: "#eab308",
+            accentColorForeground: "#050505",
+            borderRadius: "medium",
+            fontStack: "system",
+            overlayBlur: "small",
+          })}
+        >
+          {children}
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }

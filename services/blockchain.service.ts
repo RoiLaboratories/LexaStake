@@ -322,7 +322,7 @@ class BlockchainService {
           throw new Error("Failed to initialize RPC provider");
         }
 
-        // Validate wallet address (Privy may return non-checksummed addresses)
+        // Validate wallet address (wallet connectors may return non-checksummed addresses)
         let validWallet: string;
         try {
           validWallet = ethers.getAddress(walletAddress);

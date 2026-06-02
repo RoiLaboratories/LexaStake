@@ -3,23 +3,11 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { Copy, Check } from "lucide-react";
 import StakeHeader from "@/components/StakeHeader";
-import { usePrivy, User } from "@privy-io/react-auth";
+import { useConnectedWallet } from "@/hooks/useConnectedWallet";
 import { supabaseService } from "@/services/supabase.service";
 
-function extractWalletAddress(user: User | null): string | null {
-  if (!user) return null;
-  if (user.wallet?.address) return user.wallet.address;
-  const walletAccount = user.linkedAccounts?.find(
-    (acc) => "type" in acc && acc.type === "wallet",
-  );
-  if (walletAccount && "address" in walletAccount) {
-    return (walletAccount as { address: string }).address;
-  }
-  return null;
-}
-
 export default function EarnPage() {
-  const { authenticated, user } = usePrivy();
+  const { authenticated, walletAddress } = useConnectedWallet();
   const [copied, setCopied] = useState(false);
   const [swapReferralLink, setSwapReferralLink] = useState("");
   const [referralEarnings, setReferralEarnings] = useState<{
@@ -37,9 +25,7 @@ export default function EarnPage() {
   const [isLoadingEarnings, setIsLoadingEarnings] = useState(false);
 
   useEffect(() => {
-    if (authenticated && user) {
-      const walletAddress = extractWalletAddress(user);
-      if (walletAddress) {
+    if (authenticated && walletAddress) {
         // Generate both referral links
         const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://lexaswap.xyz";
         // const stakeLink = `${baseUrl}/stake?ref=${walletAddress}`;
@@ -50,12 +36,11 @@ export default function EarnPage() {
 
         // Fetch referral earnings
         fetchReferralEarnings(walletAddress);
-      }
     } else {
       setSwapReferralLink("https://lexaswap.xyz");
       setSwapEarnings(null);
     }
-  }, [authenticated, user]);
+  }, [authenticated, walletAddress]);
 
   const fetchReferralEarnings = async (walletAddress: string) => {
     setIsLoadingEarnings(true);
