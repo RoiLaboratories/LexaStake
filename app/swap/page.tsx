@@ -176,13 +176,11 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
   const handleSellTokenSelect = useCallback(
     (token: Token) => {
       setSellToken(token);
-      setReceiveToken(
-        token.symbol === "LEXA"
-          ? receiveToken.symbol === "LEXA"
-            ? TOKENS.BNB
-            : receiveToken
-          : TOKENS.LEXA,
-      );
+      if (token.symbol === receiveToken.symbol) {
+        setReceiveToken(
+          token.symbol === "BNB" ? TOKENS.USDT : TOKENS.BNB,
+        );
+      }
       clearTokenAmounts();
       setOpenTokenMenu(null);
     },
@@ -192,13 +190,11 @@ export function SwapPageClient({ referrer }: SwapPageClientProps) {
   const handleReceiveTokenSelect = useCallback(
     (token: Token) => {
       setReceiveToken(token);
-      setSellToken(
-        token.symbol === "LEXA"
-          ? sellToken.symbol === "LEXA"
-            ? TOKENS.BNB
-            : sellToken
-          : TOKENS.LEXA,
-      );
+      if (token.symbol === sellToken.symbol) {
+        setSellToken(
+          token.symbol === "BNB" ? TOKENS.USDT : TOKENS.BNB,
+        );
+      }
       clearTokenAmounts();
       setOpenTokenMenu(null);
     },
